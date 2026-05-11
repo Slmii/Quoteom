@@ -17,6 +17,7 @@
 		"db:deploy": "prisma migrate deploy",
 		"db:studio": "prisma studio",
 		"db:seed": "prisma db seed",
+		"invite": "tsx scripts/invite.ts",
 		"test": "jest",
 		"test:watch": "jest --watch",
 		"test:cov": "jest --coverage",
@@ -44,8 +45,10 @@
 	"devDependencies": {
 		"@nestjs/cli": "^11.0.0",
 		"@nestjs/schematics": "^11.0.0",
+		"@nestjs/testing": "^11.1.19",
 		"@swc/jest": "^0.2.39",
 		"@types/express": "^5.0.0",
+		"@types/jest": "^30.0.0",
 		"@types/node": "^22.10.2",
 		"@types/pg": "^8.11.10",
 		"dotenv-cli": "^8.0.0",
@@ -68,12 +71,42 @@
 		"rootDir": "src",
 		"testRegex": ".*\\.spec\\.ts$",
 		"transform": {
-			"^.+\\.(t|j)s$": "ts-jest"
+			"^.+\\.(t|j)s$": [
+				"@swc/jest",
+				{
+					"jsc": {
+						"parser": {
+							"syntax": "typescript",
+							"decorators": true
+						},
+						"target": "es2022",
+						"transform": {
+							"legacyDecorator": true,
+							"decoratorMetadata": true,
+							"useDefineForClassFields": false
+						},
+						"keepClassNames": true,
+						"baseUrl": "./src",
+						"paths": {
+							"@/*": [
+								"./*"
+							]
+						}
+					},
+					"module": {
+						"type": "commonjs"
+					}
+				}
+			]
 		},
 		"collectCoverageFrom": [
 			"**/*.(t|j)s"
 		],
 		"coverageDirectory": "../coverage",
-		"testEnvironment": "node"
+		"testEnvironment": "node",
+		"moduleNameMapper": {
+			"^@/(.*)$": "<rootDir>/$1",
+			"^(\\.{1,2}/.*)\\.js$": "$1"
+		}
 	}
 }

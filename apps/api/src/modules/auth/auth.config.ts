@@ -1,5 +1,6 @@
 import { PrismaClient } from '@/generated/prisma/client';
 import { buildMagicLinkEmail } from '@/lib/mails/magic-link.email';
+import { sendEmail } from '@/lib/mails/send';
 import type { ExpressAuthConfig } from '@auth/express';
 import GoogleProvider from '@auth/express/providers/google';
 import MicrosoftEntra from '@auth/express/providers/microsoft-entra-id';
@@ -31,7 +32,7 @@ const providers: ExpressAuthConfig['providers'] = [
 	ResendProvider({
 		apiKey: process.env.RESEND_API_KEY ?? 'placeholder',
 		from: process.env.RESEND_EMAIL_FROM ?? 'onboarding@resend.dev',
-		sendVerificationRequest: async ({ identifier: to, provider, url }) => {
+		sendVerificationRequest: async ({ identifier: to, url }) => {
 			// First gate: only send to addresses that already have a User row.
 			// Unknown addresses silently succeed (no email, no error) so attackers can't
 			// enumerate registered accounts.
@@ -44,24 +45,13 @@ const providers: ExpressAuthConfig['providers'] = [
 			const { host } = new URL(url);
 			const { html, text } = buildMagicLinkEmail(url);
 
-			const response = await fetch('https://api.resend.com/emails', {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${provider.apiKey}`,
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					from: provider.from,
-					to,
-					subject: `Sign in to ${host}`,
-					html,
-					text
-				})
+			await sendEmail({
+				to,
+				subject: `Sign in to ${host}`,
+				html,
+				text,
+				devFallbackLog: `Magic link for ${to}:\n  ${url}`
 			});
-
-			if (!response.ok) {
-				throw new Error(`Resend error: ${await response.text()}`);
-			}
 		}
 	})
 ];
@@ -97,15 +87,12 @@ export const authConfig: ExpressAuthConfig = {
 			if (url.startsWith(baseUrl)) {
 				return url.replace(baseUrl, WEB_ORIGIN);
 			}
-
 			if (url.startsWith('/')) {
 				return `${WEB_ORIGIN}${url}`;
 			}
-
 			if (url.startsWith(WEB_ORIGIN)) {
 				return url;
 			}
-
 			return WEB_ORIGIN;
 		},
 		// On sign-in, enrich the JWT with userId + currentOrganizationId so we don't have to

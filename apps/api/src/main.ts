@@ -3,9 +3,9 @@
 import '@/load-env';
 
 import { AppModule } from '@/app.module';
-import { authConfig } from '@/auth/auth.config';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
-import { LogService } from '@/common/logger/log.service';
+import { authConfig } from '@/modules/auth/auth.config';
+import { LogService } from '@/modules/logger/log.service';
 import { ExpressAuth } from '@auth/express';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';

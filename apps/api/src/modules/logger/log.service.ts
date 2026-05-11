@@ -1,4 +1,4 @@
-import { PrismaService } from '@/prisma/prisma.service';
+import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { LogLevel as PrismaLogLevel } from '@/generated/prisma/client';
 

@@ -1,4 +1,4 @@
-import { authConfig } from '@/auth/auth.config';
+import { authConfig } from '@/modules/auth/auth.config';
 import { getSession } from '@auth/express';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';

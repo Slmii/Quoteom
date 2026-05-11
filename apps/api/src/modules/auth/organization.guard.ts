@@ -1,4 +1,4 @@
-import { AuthGuard } from '@/auth/auth.guard';
+import { AuthGuard } from '@/modules/auth/auth.guard';
 import { ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 

@@ -1,11 +1,11 @@
-import type { HelloResponse } from '@/lib/interfaces/hello';
+import { HelloResponseDto } from '@/dto/hello.response.dto';
 import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
 export class AppService {
 	private readonly logger = new Logger(AppService.name);
 
-	getHello(): HelloResponse {
+	getHello(): HelloResponseDto {
 		// One call per level so you can verify what gets persisted vs console-only.
 		// `log`, `debug`, `verbose` → console only.
 		// `warn`, `error`, `fatal`  → console + Log table.

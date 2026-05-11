@@ -1,7 +1,7 @@
 import { AppService } from '@/app.service';
-import type { HelloResponse } from '@/lib/interfaces/hello';
+import { HealthResponseDto, HelloResponseDto } from '@/dto/hello.response.dto';
 import { Controller, Get } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('app')
 @Controller()
@@ -9,14 +9,16 @@ export class AppController {
 	constructor(private readonly appService: AppService) {}
 
 	@ApiOperation({ summary: 'Hello world — stack-wiring sanity check' })
+	@ApiOkResponse({ type: HelloResponseDto })
 	@Get('hello')
-	getHello(): HelloResponse {
+	getHello(): HelloResponseDto {
 		return this.appService.getHello();
 	}
 
 	@ApiOperation({ summary: 'Liveness probe' })
-	@Get('healthz')
-	getHealth(): { ok: true } {
+	@ApiOkResponse({ type: HealthResponseDto })
+	@Get('health')
+	getHealth(): HealthResponseDto {
 		return { ok: true };
 	}
 }

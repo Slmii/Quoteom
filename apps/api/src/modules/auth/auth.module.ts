@@ -1,5 +1,5 @@
-import { AuthGuard } from '@/auth/auth.guard';
-import { OrganizationGuard } from '@/auth/organization.guard';
+import { AuthGuard } from '@/modules/auth/auth.guard';
+import { OrganizationGuard } from '@/modules/auth/organization.guard';
 import { Module } from '@nestjs/common';
 
 @Module({
