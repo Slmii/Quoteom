@@ -1,4 +1,5 @@
-import { useSignOut } from '@/lib/queries/auth';
+import { createPageMeta } from '@/lib/createPageMeta';
+import { useSignOut } from '@/lib/queries/auth.queries';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -7,6 +8,15 @@ import Typography from '@mui/material/Typography';
 import { createFileRoute } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/(app)/')({
+	head: () => {
+		return {
+			meta: createPageMeta({
+				title: 'Quoteom',
+				description: 'Quote management for SMBs',
+				path: '/'
+			})
+		};
+	},
 	component: HomePage
 });
 

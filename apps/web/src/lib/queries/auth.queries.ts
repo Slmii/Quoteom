@@ -1,32 +1,21 @@
+import { getSessionServer } from '@/lib/api/auth.api';
 import { api, postForm } from '@/lib/api/client';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 
-export interface Session {
-	user?: {
-		id: string;
-		email?: string | null;
-		name?: string | null;
-		image?: string | null;
-		organizationId: string | null;
-	};
-	expires: string;
-}
-
 const AuthKeys = {
-	session: ['auth', 'session'] as const,
-	csrf: ['auth', 'csrf'] as const
+	session: ['auth', 'session'] as const
 };
 
-async function fetchSession(): Promise<Session | null> {
-	const session = await api<Session>('/api/auth/session');
-	// Auth.js returns `{}` when there's no session; normalize to null.
-	return session?.user ? session : null;
-}
-
+/**
+ * Single code path for session fetch — `createServerFn` dispatches automatically:
+ *  - SSR → executes locally with `getRequestHeader` access (cookies forwarded to API).
+ *  - Client → HTTP call to the TanStack Start server endpoint (browser cookies ride along).
+ * No `typeof window` branching needed.
+ */
 export const sessionQueryOptions = queryOptions({
 	queryKey: AuthKeys.session,
-	queryFn: fetchSession
+	queryFn: getSessionServer
 });
 
 async function getCsrfToken(): Promise<string> {
@@ -54,7 +43,6 @@ export function useSignOut() {
 		},
 		onSuccess: async () => {
 			queryClient.setQueryData(AuthKeys.session, null);
-			// Re-runs the route tree's beforeLoad → new context flows to all routes.
 			await router.invalidate();
 		}
 	});

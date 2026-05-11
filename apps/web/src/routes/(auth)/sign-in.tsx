@@ -1,4 +1,4 @@
-import { useSignInWithEmail } from '@/lib/queries/auth';
+import { useSignInWithEmail } from '@/lib/queries/auth.queries';
 import { type SignInForm, SignInSchema } from '@/lib/schemas/auth.schema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Alert from '@mui/material/Alert';

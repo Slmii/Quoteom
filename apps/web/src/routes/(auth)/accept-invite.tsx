@@ -1,4 +1,4 @@
-import { useAcceptInvitation } from '@/lib/queries/invitation';
+import { useAcceptInvitation } from '@/lib/queries/invitation.queries';
 import { AcceptInviteSearchSchema } from '@/lib/schemas/auth.schema';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';

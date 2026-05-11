@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { sessionQueryOptions } from '@/lib/queries/auth';
+import { sessionQueryOptions } from '@/lib/queries/auth.queries';
 import { theme } from '@/lib/utils/theme.utils';
 import createCache from '@emotion/cache';
 import { CacheProvider } from '@emotion/react';

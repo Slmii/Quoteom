@@ -123,6 +123,7 @@ export const authConfig: ExpressAuthConfig = {
 					organizationId: (token.organizationId as string | null) ?? null
 				};
 			}
+
 			return session;
 		}
 	},

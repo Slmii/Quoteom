@@ -19,7 +19,13 @@ export default tseslint.config(
 	{
 		rules: {
 			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-			'@typescript-eslint/consistent-type-imports': 'warn'
+			'@typescript-eslint/consistent-type-imports': 'warn',
+			'no-mixed-spaces-and-tabs': ['error', 'smart-tabs'],
+			'linebreak-style': ['error', 'unix'],
+			curly: 'error',
+			'react/react-in-jsx-scope': 'off',
+			'react/no-unescaped-entities': 'off',
+			'react/jsx-curly-brace-presence': ['error', { props: 'never', children: 'never' }]
 		}
 	},
 	{

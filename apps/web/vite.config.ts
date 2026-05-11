@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
 	// Vite only injects env into `import.meta.env` for client code — not `process.env`.
 	// Use loadEnv() to read .env into a real object for server-side config like the proxy.
 	const env = loadEnv(mode, process.cwd(), '');
-	const API_TARGET = env.VITE_API_URL || 'http://localhost:3001';
+	const API_TARGET = env.VITE_API_URL;
 
 	return {
 		server: {
