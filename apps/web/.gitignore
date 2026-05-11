@@ -1,0 +1,8 @@
+# Build output
+dist
+.output
+.nitro
+.tanstack
+
+# TanStack Router auto-generated route tree (regenerated on dev/build)
+src/routeTree.gen.ts

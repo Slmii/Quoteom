@@ -1,0 +1,59 @@
+# DigitalOcean App Platform spec.
+# Note: monorepo deploys on App Platform are buildpack-driven; you may need to
+# tune build_command and run_command on your first deploy depending on which
+# buildpack DO selects. This file is a reasonable starting point — verify it
+# against `doctl apps spec validate .do/app.yaml` before pushing.
+name: quoteom
+region: ams
+services:
+    - name: api
+      source_dir: /
+      github:
+          branch: main
+          deploy_on_push: true
+      build_command: npm ci && npx turbo run build --filter=@quoteom/api
+      run_command: node apps/api/dist/main.js
+      environment_slug: node-js
+      http_port: 3001
+      instance_size_slug: basic-xs
+      instance_count: 1
+      routes:
+          - path: /api
+      envs:
+          - key: NODE_ENV
+            value: production
+          - key: API_PORT
+            value: '3001'
+          - key: DATABASE_URL
+            scope: RUN_AND_BUILD_TIME
+            type: SECRET
+          - key: WEB_ORIGIN
+            value: ${web.PUBLIC_URL}
+
+    - name: web
+      source_dir: /
+      github:
+          branch: main
+          deploy_on_push: true
+      build_command: npm ci && npx turbo run build --filter=@quoteom/web
+      run_command: node apps/web/.output/server/index.mjs
+      environment_slug: node-js
+      http_port: 3000
+      instance_size_slug: basic-xs
+      instance_count: 1
+      routes:
+          - path: /
+      envs:
+          - key: NODE_ENV
+            value: production
+          - key: WEB_PORT
+            value: '3000'
+          - key: VITE_API_URL
+            value: ${api.PUBLIC_URL}
+
+databases:
+    - name: quoteom-db
+      engine: PG
+      version: '16'
+      production: false
+      cluster_name: quoteom-db
