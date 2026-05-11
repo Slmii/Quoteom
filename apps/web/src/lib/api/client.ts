@@ -16,7 +16,10 @@ function baseUrl(): string {
  * has the session credentials. Returns undefined on the client (browser handles its own).
  */
 async function serverCookies(): Promise<string | undefined> {
-	if (typeof window !== 'undefined') return undefined;
+	if (typeof window !== 'undefined') {
+		return undefined;
+	}
+
 	try {
 		const { getRequestHeader } = await import('@tanstack/react-start/server');
 		return getRequestHeader('cookie') ?? undefined;

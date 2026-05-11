@@ -1,4 +1,5 @@
 import { useSignInWithEmail } from '@/lib/queries/auth';
+import { type SignInForm, SignInSchema } from '@/lib/schemas/auth.schema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -9,14 +10,8 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useForm } from 'react-hook-form';
-import { z } from 'zod';
 
-const SignInSchema = z.object({
-	email: z.string().email('Please enter a valid email address')
-});
-type SignInForm = z.infer<typeof SignInSchema>;
-
-export const Route = createFileRoute('/sign-in')({
+export const Route = createFileRoute('/(auth)/sign-in')({
 	component: SignInPage
 });
 

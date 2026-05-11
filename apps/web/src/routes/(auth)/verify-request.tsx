@@ -1,15 +1,11 @@
+import { VerifyRequestSearchSchema } from '@/lib/schemas/auth.schema';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { z } from 'zod';
 
-const SearchSchema = z.object({
-	email: z.string().optional()
-});
-
-export const Route = createFileRoute('/verify-request')({
-	validateSearch: SearchSchema,
+export const Route = createFileRoute('/(auth)/verify-request')({
+	validateSearch: VerifyRequestSearchSchema,
 	component: VerifyRequestPage
 });
 

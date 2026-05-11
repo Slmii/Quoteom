@@ -16,7 +16,7 @@ const authPrisma = new PrismaClient({
 	adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
 });
 
-const WEB_ORIGIN = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
+const WEB_ORIGIN = `${process.env.WEB_ORIGIN}`;
 
 // Block Auth.js from auto-creating users. Sign-in is for already-provisioned accounts only;
 // new users must arrive via an Invitation (created by Quoteom admin).
@@ -87,12 +87,15 @@ export const authConfig: ExpressAuthConfig = {
 			if (url.startsWith(baseUrl)) {
 				return url.replace(baseUrl, WEB_ORIGIN);
 			}
+
 			if (url.startsWith('/')) {
 				return `${WEB_ORIGIN}${url}`;
 			}
+
 			if (url.startsWith(WEB_ORIGIN)) {
 				return url;
 			}
+
 			return WEB_ORIGIN;
 		},
 		// On sign-in, enrich the JWT with userId + currentOrganizationId so we don't have to

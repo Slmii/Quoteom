@@ -1,5 +1,5 @@
 import { api, postForm } from '@/lib/api/client';
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 
 export interface Session {
@@ -29,10 +29,6 @@ export const sessionQueryOptions = queryOptions({
 	queryFn: fetchSession
 });
 
-export function useSession() {
-	return useQuery(sessionQueryOptions);
-}
-
 async function getCsrfToken(): Promise<string> {
 	const { csrfToken } = await api<{ csrfToken: string }>('/api/auth/csrf');
 	return csrfToken;
@@ -50,6 +46,7 @@ export function useSignInWithEmail() {
 export function useSignOut() {
 	const queryClient = useQueryClient();
 	const router = useRouter();
+
 	return useMutation({
 		mutationFn: async () => {
 			const csrfToken = await getCsrfToken();

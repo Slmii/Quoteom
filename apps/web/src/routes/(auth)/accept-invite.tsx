@@ -1,4 +1,5 @@
 import { useAcceptInvitation } from '@/lib/queries/invitation';
+import { AcceptInviteSearchSchema } from '@/lib/schemas/auth.schema';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -8,14 +9,9 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { z } from 'zod';
 
-const SearchSchema = z.object({
-	token: z.string().min(1)
-});
-
-export const Route = createFileRoute('/accept-invite')({
-	validateSearch: SearchSchema,
+export const Route = createFileRoute('/(auth)/accept-invite')({
+	validateSearch: AcceptInviteSearchSchema,
 	component: AcceptInvitePage
 });
 
@@ -27,7 +23,7 @@ function AcceptInvitePage() {
 
 	// Fire the accept call once on mount.
 	useEffect(() => {
-		accept.mutateAsync(token);
+		accept.mutate(token);
 	}, []);
 
 	return (

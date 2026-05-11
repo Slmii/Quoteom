@@ -16,7 +16,6 @@ export const Route = createRootRouteWithContext<{
 }>()({
 	beforeLoad: async ({ context }) => {
 		const session = await context.queryClient.ensureQueryData(sessionQueryOptions);
-		console.log('Session loaded in beforeLoad:', session); // Debug log to verify session data
 		return { session };
 	},
 	head: () => ({
