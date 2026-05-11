@@ -146,8 +146,8 @@ function SeatsLine({ seats, state }: { seats: BillingStatus['seats']; state: Bil
 
 			{!isTrial && overage > 0 && (
 				<Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
-					{overage} extra seat{overage === 1 ? '' : 's'} ×{' '}
-					{formatEuros(seats.overagePerSeatCents)}/mo = <strong>{formatEuros(overageCents)}/mo overage</strong>
+					{overage} extra seat{overage === 1 ? '' : 's'} × {formatEuros(seats.overagePerSeatCents)}/mo ={' '}
+					<strong>{formatEuros(overageCents)}/mo overage</strong>
 				</Typography>
 			)}
 
