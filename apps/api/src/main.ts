@@ -1,5 +1,6 @@
 import { AppModule } from '@/app.module';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
+import { LogService } from '@/common/logger/log.service';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -11,7 +12,8 @@ import 'reflect-metadata';
 config({ path: resolve(__dirname, '../.env') });
 
 async function bootstrap() {
-	const app = await NestFactory.create(AppModule);
+	const app = await NestFactory.create(AppModule, { bufferLogs: true });
+	app.useLogger(app.get(LogService));
 
 	app.enableCors({
 		origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',

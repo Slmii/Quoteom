@@ -41,6 +41,37 @@ model Organization {
     memberships Membership[]
 }
 
+// W2.6 — Database-backed structured logger.
+// Pre-Sentry stand-in. `warn`/`error`/`fatal` events from NestJS's Logger are
+// persisted here in addition to the console.
+enum LogLevel {
+    FATAL
+    ERROR
+    WARN
+    INFO
+    DEBUG
+}
+
+model Log {
+    id        String   @id @default(uuid()) @db.Uuid
+    level     LogLevel
+    message   String   @db.Text
+    createdAt DateTime @default(now())
+
+    context  String?
+    stack    String?  @db.Text
+    metadata Json?
+
+    // Correlation fields — populated once auth + request tracing land.
+    requestId      String?
+    userId         String?  @db.Uuid
+    organizationId String?  @db.Uuid
+
+    @@index([level, createdAt(sort: Desc)])
+    @@index([organizationId, createdAt(sort: Desc)])
+    @@index([requestId])
+}
+
 model Membership {
     id             String         @id @default(uuid()) @db.Uuid
     userId         String         @db.Uuid
