@@ -1,15 +1,16 @@
+// Must be the first import — populates process.env before any other module's
+// top-level code (e.g. auth.config's PrismaClient) reads from it.
+import '@/load-env';
+
 import { AppModule } from '@/app.module';
+import { authConfig } from '@/auth/auth.config';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
 import { LogService } from '@/common/logger/log.service';
+import { ExpressAuth } from '@auth/express';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { config } from 'dotenv';
-import { resolve } from 'node:path';
 import 'reflect-metadata';
-
-// Load apps/api/.env (works for both src/main.ts in dev and dist/main.js in prod).
-config({ path: resolve(__dirname, '../.env') });
 
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -20,6 +21,10 @@ async function bootstrap() {
 		credentials: true
 	});
 	app.setGlobalPrefix('api');
+
+	// Auth.js — mounted as Express middleware on /api/auth/*.
+	// Sits before global pipes/filters because it handles its own request/response lifecycle.
+	app.use('/api/auth', ExpressAuth(authConfig));
 
 	app.useGlobalPipes(
 		new ValidationPipe({

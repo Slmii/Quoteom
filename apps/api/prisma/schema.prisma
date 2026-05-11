@@ -14,31 +14,13 @@ datasource db {
 }
 
 // W1.4 — Initial tenancy schema.
-// Single owner + single teammate per org enforced in application logic
-// (Prisma can't express "max N rows by FK"; see OrganizationsService).
-
+// Users are provisioned by Quoteom admin via invitation; self-signup is disabled.
+// An org can have many users. Roles exist but are informational until a feature enforces them
+// (e.g. billing notifications, "can't delete the org while you're the last OWNER").
 enum MembershipRole {
     OWNER
-    TEAMMATE
-}
-
-model User {
-    id        String   @id @default(uuid()) @db.Uuid
-    email     String   @unique
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    memberships Membership[]
-}
-
-model Organization {
-    id        String   @id @default(uuid()) @db.Uuid
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    memberships Membership[]
+    MEMBER
+    EXTERNAL
 }
 
 // W2.6 — Database-backed structured logger.
@@ -52,6 +34,35 @@ enum LogLevel {
     DEBUG
 }
 
+model User {
+    id                    String    @id @default(uuid()) @db.Uuid
+    email                 String    @unique
+    name                  String?
+    image                 String?
+    emailVerified         DateTime?
+    // Active organization for this user — session pins to this. Users with multiple
+    // memberships switch via a future "switch org" mutation.
+    currentOrganizationId String?   @db.Uuid
+    createdAt             DateTime  @default(now())
+    updatedAt             DateTime  @updatedAt
+
+    currentOrganization Organization? @relation("CurrentOrganization", fields: [currentOrganizationId], references: [id], onDelete: SetNull)
+    memberships         Membership[]
+    accounts            Account[]
+    sessions            Session[]
+}
+
+model Organization {
+    id        String   @id @default(uuid()) @db.Uuid
+    name      String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    memberships    Membership[]
+    invitations    Invitation[]
+    currentMembers User[]       @relation("CurrentOrganization")
+}
+
 model Log {
     id        String   @id @default(uuid()) @db.Uuid
     level     LogLevel
@@ -59,24 +70,73 @@ model Log {
     createdAt DateTime @default(now())
 
     context  String?
-    stack    String?  @db.Text
+    stack    String? @db.Text
     metadata Json?
 
     // Correlation fields — populated once auth + request tracing land.
     requestId      String?
-    userId         String?  @db.Uuid
-    organizationId String?  @db.Uuid
+    userId         String? @db.Uuid
+    organizationId String? @db.Uuid
 
     @@index([level, createdAt(sort: Desc)])
     @@index([organizationId, createdAt(sort: Desc)])
     @@index([requestId])
 }
 
+// W2.1 — Auth.js (v5) Prisma adapter models.
+// Schema dictated by @auth/prisma-adapter; field names use snake_case in places
+// where the adapter expects them. Do not rename.
+// TODO(W2.1): encrypt Account.refresh_token / access_token / id_token at rest
+//   — pgcrypto column-level or libsodium app-level wrapper. Tracked for follow-up.
+
+model Account {
+    id                String   @id @default(uuid()) @db.Uuid
+    userId            String   @db.Uuid
+    type              String
+    provider          String
+    providerAccountId String
+    refresh_token     String?  @db.Text
+    access_token      String?  @db.Text
+    expires_at        Int?
+    token_type        String?
+    scope             String?
+    id_token          String?  @db.Text
+    session_state     String?
+    createdAt         DateTime @default(now())
+    updatedAt         DateTime @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([provider, providerAccountId])
+    @@index([userId])
+}
+
+model Session {
+    id           String   @id @default(uuid()) @db.Uuid
+    sessionToken String   @unique
+    userId       String   @db.Uuid
+    expires      DateTime
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
+}
+
+model VerificationToken {
+    identifier String
+    token      String   @unique
+    expires    DateTime
+
+    @@id([identifier, token])
+}
+
 model Membership {
     id             String         @id @default(uuid()) @db.Uuid
     userId         String         @db.Uuid
     organizationId String         @db.Uuid
-    role           MembershipRole
+    role           MembershipRole @default(MEMBER)
     createdAt      DateTime       @default(now())
     updatedAt      DateTime       @updatedAt
 
@@ -84,5 +144,24 @@ model Membership {
     organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
     @@unique([userId, organizationId])
+    @@index([organizationId])
+}
+
+// Pending invitations to join an organization. Created by Quoteom admin; redeemed by
+// the recipient clicking a tokenized link sent via email. On redemption: creates the
+// User row (if one doesn't already exist for that email) and a Membership.
+model Invitation {
+    id             String         @id @default(uuid()) @db.Uuid
+    token          String         @unique
+    email          String
+    organizationId String         @db.Uuid
+    role           MembershipRole @default(MEMBER)
+    acceptedAt     DateTime?
+    expiresAt      DateTime
+    createdAt      DateTime       @default(now())
+
+    organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+    @@index([email])
     @@index([organizationId])
 }
