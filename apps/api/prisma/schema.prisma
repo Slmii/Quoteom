@@ -60,18 +60,18 @@ model Organization {
 
     memberships    Membership[]
     invitations    Invitation[]
-    currentMembers User[]       @relation("CurrentOrganization")
+    currentMembers User[]        @relation("CurrentOrganization")
+    subscription   Subscription?
 }
 
 model Log {
     id        String   @id @default(uuid()) @db.Uuid
     level     LogLevel
     message   String   @db.Text
+    context   String?
+    stack     String?  @db.Text
+    metadata  Json?
     createdAt DateTime @default(now())
-
-    context  String?
-    stack    String? @db.Text
-    metadata Json?
 
     // Correlation fields — populated once auth + request tracing land.
     requestId      String?
@@ -164,4 +164,31 @@ model Invitation {
 
     @@index([email])
     @@index([organizationId])
+}
+
+// W2.4 — Stripe subscription state cache.
+// One row per Organization (1:1). Acts as the local "single source of truth" that we
+// sync from Stripe via webhooks + the post-checkout /sync endpoint. Avoids the split-
+// brain problem of trusting individual webhook payloads — every relevant event triggers
+// a full re-fetch via `BillingService.syncFromStripe(customerId)`.
+//
+// `status` mirrors Stripe's Subscription.Status enum: "active" | "trialing" | "past_due"
+// | "canceled" | "incomplete" | "incomplete_expired" | "unpaid" | "paused" — kept as
+// String (not enum) so Stripe-side additions don't require a Prisma migration.
+model Subscription {
+    id                   String    @id @default(uuid()) @db.Uuid
+    organizationId       String    @unique @db.Uuid
+    stripeCustomerId     String    @unique
+    stripeSubscriptionId String?   @unique
+    status               String?
+    priceId              String?
+    currentPeriodStart   DateTime?
+    currentPeriodEnd     DateTime?
+    cancelAtPeriodEnd    Boolean   @default(false)
+    paymentMethodBrand   String?
+    paymentMethodLast4   String?
+    createdAt            DateTime  @default(now())
+    updatedAt            DateTime  @updatedAt
+
+    organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }

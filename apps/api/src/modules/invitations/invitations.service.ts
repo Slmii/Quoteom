@@ -1,3 +1,4 @@
+import type { EnvSchema } from '@/config/env.schema';
 import { MembershipRole } from '@/generated/prisma/client';
 import {
 	INVITATION_ALREADY_ACCEPTED,
@@ -8,6 +9,7 @@ import {
 import { buildInviteEmail } from '@/lib/mails/invite.email';
 import { sendEmail } from '@/lib/mails/send';
 import { PrismaService } from '@/modules/prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import { ConflictException, GoneException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 
@@ -29,7 +31,10 @@ export interface AcceptResult {
 
 @Injectable()
 export class InvitationsService {
-	constructor(private readonly prisma: PrismaService) {}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly config: ConfigService<EnvSchema, true>
+	) {}
 
 	async create(input: CreateInvitationInput): Promise<{ id: string; token: string }> {
 		const organization = await this.prisma.organization.findUnique({
@@ -53,7 +58,7 @@ export class InvitationsService {
 			}
 		});
 
-		const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
+		const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
 		const url = `${webOrigin}/accept-invite?token=${token}`;
 		const { subject, html, text } = buildInviteEmail({
 			url,

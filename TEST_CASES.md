@@ -232,9 +232,78 @@ Pre-requisite: API running (`cd apps/api && npm run dev`) AND web running (`cd a
 
 ---
 
+## Billing (Stripe)
+
+> **Setup once:**
+> 1. Stripe CLI logged in: `stripe login`.
+> 2. Local webhook forwarding running in a separate terminal: `stripe listen --forward-to localhost:3001/api/billing/webhook`.
+> 3. Copy the `whsec_…` printed by `stripe listen` into `apps/api/.env` as `STRIPE_WEBHOOK_SECRET` and restart the API.
+> 4. `STRIPE_SECRET_KEY` set to a **test mode** key; `STRIPE_PRICE_ID` set to a recurring EUR price (lookup_key `quoteom_monthly_eur`).
+> 5. In the Stripe Dashboard's Customer Portal settings, enable: update payment method, cancel subscription, view invoices.
+
+### BILLING-01: Happy path — subscribe with `4242 4242 4242 4242`
+- [ ] Sign in as an org owner; navigate to `/billing`.
+- [ ] Click **Subscribe** → redirected to Stripe Checkout (URL starts with `https://checkout.stripe.com/`).
+- [ ] Confirm the page shows **EUR**, a **14-day trial**, and offers card + iDEAL + SEPA (assuming Dashboard configured).
+- [ ] Pay with card `4242 4242 4242 4242`, any future expiry, any CVC, any postal code.
+- [ ] **Expect** redirect to `/billing/success?session_id=...`; spinner shows "Confirming your subscription…" then "You're all set".
+- [ ] **Expect** `stripe listen` shows `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated` events all forwarded with `[200]`.
+- [ ] **Expect** in the DB: `Subscription.status = 'trialing'`, `stripeSubscriptionId` populated, `currentPeriodStart`/`currentPeriodEnd` set ~14 days apart, `paymentMethodBrand = 'card'`, `paymentMethodLast4 = '4242'`.
+- [ ] Reload `/billing` → page now shows the **Manage subscription** state (not Subscribe).
+
+### BILLING-02: Customer Portal access
+- [ ] On `/billing` (post BILLING-01), click **Manage subscription**.
+- [ ] **Expect** redirect to `https://billing.stripe.com/p/session/...`; page lists current subscription, payment method ending in 4242, upcoming invoice.
+- [ ] Click the back link → returns to `/billing` on the web app.
+
+### BILLING-03: Webhook signature verification rejects forgeries
+- [ ] In a terminal: `curl -i -X POST http://localhost:3001/api/billing/webhook -H "Content-Type: application/json" -H "stripe-signature: t=1,v1=bogus" -d '{"id":"evt_test","type":"customer.subscription.updated"}'`.
+- [ ] **Expect** HTTP `400`; body contains "Invalid Stripe signature".
+- [ ] **Expect** no DB writes — `Subscription` row for the org is unchanged (check `updatedAt`).
+
+### BILLING-04: Failed payment via Stripe CLI trigger
+- [ ] With `stripe listen` running, run: `stripe trigger payment_intent.payment_failed`.
+- [ ] **Expect** the CLI shows `payment_intent.payment_failed` and `charge.failed` forwarded with `[200]`.
+- [ ] **Expect** API logs include `Event payment_intent.payment_failed has no customer id — skipping` OR a sync log if the synthetic intent has a customer. (Trigger uses an ephemeral test customer, so most likely the skip path — that's correct behavior.)
+- [ ] **Variant (subscription-attached failure):** in Dashboard, create a test customer with subscription, attach card `4000 0000 0000 0341` (always fails) via Portal, wait for the next invoice retry (or force one via `stripe trigger invoice.payment_failed --override invoice:customer=cus_XXX`).
+- [ ] **Expect** the org's `Subscription.status` flips to `past_due` after sync.
+
+### BILLING-05: Stale customer self-healing
+- [ ] In Stripe Dashboard (test mode), find the org's customer and **delete** it.
+- [ ] On `/billing`, click **Subscribe** again.
+- [ ] **Expect** API logs include `Stripe customer cus_… no longer exists — recreating`.
+- [ ] **Expect** Checkout still opens normally; DB `Subscription.stripeCustomerId` now points to a fresh `cus_…` and all sync-derived fields are cleared back to defaults (`status = null`, no `stripeSubscriptionId`).
+
+### BILLING-06: Trial-end transition via Stripe test clock
+- [ ] In Dashboard → Developers → Test Clocks, create a clock at "now". Create a customer attached to the clock, then run BILLING-01's checkout against that customer (advanced: requires manually building a Checkout session against the clock-bound customer, or use Stripe API directly).
+- [ ] Advance the clock by **15 days**.
+- [ ] **Expect** `stripe listen` shows `customer.subscription.trial_will_end` (3 days before end) and then `customer.subscription.updated` with `status: 'active'` after the trial expires.
+- [ ] **Expect** DB `Subscription.status` transitions `trialing → active` and `currentPeriodEnd` jumps to ~30 days after trial end.
+
+### BILLING-07: Cancellation via Customer Portal
+- [ ] On `/billing` → **Manage subscription** → in Portal, click **Cancel subscription** → confirm "at period end".
+- [ ] **Expect** `stripe listen` shows `customer.subscription.updated` with `cancel_at_period_end: true`.
+- [ ] **Expect** DB `Subscription.cancelAtPeriodEnd = true`, status still `trialing` or `active` (cancellation is scheduled, not immediate).
+- [ ] **Resume:** in Portal, click **Renew subscription** → DB `cancelAtPeriodEnd` flips back to `false` via the next `customer.subscription.updated` webhook.
+
+### BILLING-08: 3DS authentication required
+- [ ] Run BILLING-01 with card `4000 0027 6000 3184` (requires 3DS).
+- [ ] **Expect** Stripe Checkout shows a 3DS challenge frame. Approve.
+- [ ] **Expect** the rest of the flow matches BILLING-01.
+
+### BILLING-09: Generic card decline
+- [ ] Run BILLING-01 with card `4000 0000 0000 0002` (generic decline).
+- [ ] **Expect** Stripe Checkout displays "Your card was declined."; no redirect happens. No `Subscription.status` write.
+
+### BILLING-10: Eager sync race vs. webhook
+- [ ] In BILLING-01, watch the API logs: the `POST /api/billing/sync` from `/billing/success` and the webhook-driven `syncFromStripe` will run within a second of each other.
+- [ ] **Expect** both succeed; final DB state is identical regardless of which won (the function is idempotent).
+
+---
+
 ## How to maintain this doc
 
-- **Adding a feature** → add a new `## Section` with `### XXX-01:` test cases. Use a short uppercase prefix per area (`AUTH`, `INV`, `TEN`, `LOG`, `MAIL`, `DB`, then `OPP` for opportunities, `QUO` for quotes, etc.).
+- **Adding a feature** → add a new `## Section` with `### XXX-01:` test cases. Use a short uppercase prefix per area (`AUTH`, `INV`, `TEN`, `LOG`, `MAIL`, `DB`, `WEB`, `BILLING`, then `OPP` for opportunities, `QUO` for quotes, etc.).
 - **Removing a feature** → strike through the section, delete after a week if no regression.
 - **A test reveals a bug** → don't delete the test case after fixing; future regressions need it.
 - **Keep it executable** — every test case should be a thing the reader can copy-paste and run, not prose.

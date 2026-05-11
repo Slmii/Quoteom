@@ -4,20 +4,31 @@ import '@/load-env';
 
 import { AppModule } from '@/app.module';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
+import type { EnvSchema } from '@/config/env.schema';
 import { authConfig } from '@/modules/auth/auth.config';
 import { LogService } from '@/modules/logger/log.service';
 import { ExpressAuth } from '@auth/express';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import 'reflect-metadata';
 
 async function bootstrap() {
-	const app = await NestFactory.create(AppModule, { bufferLogs: true });
+	// `rawBody: true` exposes `request.rawBody` so the Stripe webhook handler can verify
+	// the signature header against the unparsed request body. Without it Stripe's
+	// `constructEvent()` always throws.
+	const app = await NestFactory.create(AppModule, {
+		bufferLogs: true,
+		rawBody: true
+	});
+
 	app.useLogger(app.get(LogService));
 
+	const config = app.get(ConfigService<EnvSchema, true>);
+
 	app.enableCors({
-		origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+		origin: config.get('WEB_ORIGIN', { infer: true }),
 		credentials: true
 	});
 	app.setGlobalPrefix('api');
@@ -48,7 +59,7 @@ async function bootstrap() {
 		jsonDocumentUrl: 'docs/openapi.json'
 	});
 
-	const port = Number(process.env.API_PORT ?? 3001);
+	const port = config.get('API_PORT', { infer: true });
 	await app.listen(port);
 
 	console.log(`API listening on http://localhost:${port}`);

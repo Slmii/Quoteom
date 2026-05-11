@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/(app)/')({
 	head: () => {
@@ -21,6 +21,7 @@ export const Route = createFileRoute('/(app)/')({
 });
 
 function HomePage() {
+	const navigate = useNavigate();
 	const { session } = Route.useRouteContext();
 	const signOut = useSignOut();
 
@@ -47,9 +48,14 @@ function HomePage() {
 						Active organization: <code>{user.organizationId ?? '— no active organization —'}</code>
 					</Typography>
 
-					<Button variant='outlined' onClick={() => signOut.mutate()} disabled={signOut.isPending}>
-						{signOut.isPending ? 'Signing out...' : 'Sign out'}
-					</Button>
+					<Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+						<Button variant='contained' onClick={() => navigate({ to: '/billing' })}>
+							Billing
+						</Button>
+						<Button variant='outlined' onClick={() => signOut.mutate()} disabled={signOut.isPending}>
+							{signOut.isPending ? 'Signing out...' : 'Sign out'}
+						</Button>
+					</Box>
 				</Box>
 			</Paper>
 		</Container>

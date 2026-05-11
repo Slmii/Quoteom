@@ -29,6 +29,7 @@
 		"@auth/express": "^0.12.2",
 		"@auth/prisma-adapter": "^2.11.2",
 		"@nestjs/common": "^11.0.1",
+		"@nestjs/config": "^4.0.4",
 		"@nestjs/core": "^11.0.1",
 		"@nestjs/platform-express": "^11.0.1",
 		"@nestjs/swagger": "^11.4.2",
@@ -40,7 +41,9 @@
 		"dotenv": "^16.4.7",
 		"pg": "^8.20.0",
 		"reflect-metadata": "^0.2.2",
-		"rxjs": "^7.8.1"
+		"rxjs": "^7.8.1",
+		"stripe": "^22.1.1",
+		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@nestjs/cli": "^11.0.0",
