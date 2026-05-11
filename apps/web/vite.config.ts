@@ -3,7 +3,7 @@ import viteReact from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import tsConfigPaths from 'vite-tsconfig-paths';
 
-const API_TARGET = process.env.VITE_API_URL ?? 'http://localhost:3001';
+const API_TARGET = `${process.env.VITE_API_URL}`;
 
 export default defineConfig({
 	server: {

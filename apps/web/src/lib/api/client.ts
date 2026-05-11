@@ -1,12 +1,4 @@
-const SERVER_API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
-
-if (typeof window === 'undefined' && !import.meta.env.VITE_API_URL && import.meta.env.PROD) {
-	// Loud failure in prod — silently defaulting to localhost would break SSR with
-	// no obvious cause.
-	throw new Error(
-		'VITE_API_URL must be set in production. Set it to the internal API hostname so SSR fetches can reach the API.'
-	);
-}
+const SERVER_API_URL = `${import.meta.env.VITE_API_URL}`;
 
 /**
  * Base URL strategy:
