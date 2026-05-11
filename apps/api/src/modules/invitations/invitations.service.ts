@@ -4,7 +4,8 @@ import {
 	INVITATION_ALREADY_ACCEPTED,
 	INVITATION_EXPIRED,
 	INVITATION_NOT_FOUND,
-	ORGANIZATION_NOT_FOUND
+	ORGANIZATION_NOT_FOUND,
+	trialSeatLimitReached
 } from '@/lib/errors';
 import { buildInviteEmail } from '@/lib/mails/invite.email';
 import { sendEmail } from '@/lib/mails/send';
@@ -193,7 +194,7 @@ export class InvitationsService {
 			{
 				statusCode: HttpStatus.PAYMENT_REQUIRED,
 				code: TRIAL_SEAT_LIMIT_CODE,
-				message: `Trial accounts are limited to ${SEATS_INCLUDED} seats. Subscribe to invite more teammates.`,
+				message: trialSeatLimitReached(SEATS_INCLUDED),
 				billingPath: '/billing'
 			},
 			HttpStatus.PAYMENT_REQUIRED

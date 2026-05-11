@@ -1,4 +1,5 @@
 import { PrismaClient } from '@/generated/prisma/client';
+import { SELF_SIGNUP_DISABLED } from '@/lib/errors';
 import { buildMagicLinkEmail } from '@/lib/mails/magic-link.email';
 import { sendEmail } from '@/lib/mails/send';
 import type { ExpressAuthConfig } from '@auth/express';
@@ -6,7 +7,10 @@ import GoogleProvider from '@auth/express/providers/google';
 import MicrosoftEntra from '@auth/express/providers/microsoft-entra-id';
 import ResendProvider from '@auth/express/providers/resend';
 import { PrismaAdapter } from '@auth/prisma-adapter';
+import { Logger } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
+
+const logger = new Logger('Auth');
 
 // Auth.js needs the raw PrismaClient (its adapter introspects model names at construction).
 // We construct a dedicated instance here rather than reusing PrismaService because the auth
@@ -24,7 +28,7 @@ const baseAdapter = PrismaAdapter(authPrisma as never);
 const adapter: typeof baseAdapter = {
 	...baseAdapter,
 	createUser: () => {
-		throw new Error('User self-signup is disabled. Users must be invited.');
+		throw new Error(SELF_SIGNUP_DISABLED);
 	}
 };
 
@@ -38,7 +42,7 @@ const providers: ExpressAuthConfig['providers'] = [
 			// enumerate registered accounts.
 			const existing = await authPrisma.user.findUnique({ where: { email: to } });
 			if (!existing) {
-				console.warn(`[auth] Sign-in attempted for unknown email: ${to}`);
+				logger.warn(`Sign-in attempted for unknown email: ${to}`);
 				return;
 			}
 

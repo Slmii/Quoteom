@@ -1,4 +1,10 @@
 import type { EnvSchema } from '@/config/env.schema';
+import {
+	STRIPE_RAW_BODY_MISSING,
+	STRIPE_SIGNATURE_HEADER_MISSING,
+	STRIPE_SIGNATURE_INVALID,
+	STRIPE_WEBHOOK_SECRET_MISSING
+} from '@/lib/errors';
 import { OrganizationGuard } from '@/modules/auth/organization.guard';
 import { BillingService } from '@/modules/billing/billing.service';
 import { BillingStatusResponseDto } from '@/modules/billing/dto/billing-status.response.dto';
@@ -86,16 +92,16 @@ export class BillingController {
 		@Headers('stripe-signature') signature: string | undefined
 	): Promise<{ received: boolean }> {
 		if (!signature) {
-			throw new BadRequestException('Missing Stripe-Signature header');
+			throw new BadRequestException(STRIPE_SIGNATURE_HEADER_MISSING);
 		}
 
 		if (!request.rawBody) {
-			throw new BadRequestException('Raw body unavailable — check rawBody option in main.ts');
+			throw new BadRequestException(STRIPE_RAW_BODY_MISSING);
 		}
 
 		const webhookSecret = this.config.get('STRIPE_WEBHOOK_SECRET', { infer: true });
 		if (!webhookSecret) {
-			throw new BadRequestException('STRIPE_WEBHOOK_SECRET is not configured');
+			throw new BadRequestException(STRIPE_WEBHOOK_SECRET_MISSING);
 		}
 
 		let event: ReturnType<InstanceType<typeof Stripe>['webhooks']['constructEvent']>;
@@ -104,7 +110,7 @@ export class BillingController {
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'unknown';
 			this.logger.warn(`Stripe webhook signature verification failed: ${message}`);
-			throw new BadRequestException('Invalid signature');
+			throw new BadRequestException(STRIPE_SIGNATURE_INVALID);
 		}
 
 		// Acknowledge immediately; process asynchronously to keep Stripe's retry timer happy.

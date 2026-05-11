@@ -1,3 +1,4 @@
+import { MISSING_ORG_CONTEXT, TRIAL_ENDED } from '@/lib/errors';
 import {
 	BILLING_REQUIRED_CODE,
 	ENTITLED_STRIPE_STATUSES,
@@ -37,7 +38,7 @@ export class TrialGateGuard implements CanActivate {
 			// OrganizationGuard didn't run or failed silently — fail closed by throwing
 			// the standard 402 rather than silently passing. This should never happen
 			// in normal flow but defensive coding here is cheap.
-			throw this.billingRequired('Missing organization context.');
+			throw this.billingRequired(MISSING_ORG_CONTEXT);
 		}
 
 		const sub = await this.prisma.subscription.findUnique({
@@ -62,7 +63,7 @@ export class TrialGateGuard implements CanActivate {
 			}
 		}
 
-		throw this.billingRequired('Your trial has ended. Subscribe to continue.');
+		throw this.billingRequired(TRIAL_ENDED);
 	}
 
 	private billingRequired(message: string): HttpException {

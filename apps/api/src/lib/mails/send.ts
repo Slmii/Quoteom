@@ -1,3 +1,7 @@
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('Mail');
+
 interface SendEmailInput {
 	to: string;
 	subject: string;
@@ -13,14 +17,15 @@ interface SendEmailInput {
 /**
  * Single chokepoint for outgoing email. Switches automatically:
  *  - With RESEND_API_KEY → POST to Resend's HTTP API.
- *  - Without RESEND_API_KEY → log `devFallbackLog` to console.
+ *  - Without RESEND_API_KEY → log `devFallbackLog` via the global Logger (routes
+ *    through LogService — see main.ts useLogger wiring).
  */
 export async function sendEmail(input: SendEmailInput): Promise<void> {
 	const { to, subject, html, text, devFallbackLog } = input;
 
 	if (!process.env.RESEND_API_KEY) {
 		if (devFallbackLog) {
-			console.log(`\n  ${devFallbackLog}\n`);
+			logger.log(`\n  ${devFallbackLog}\n`);
 		}
 		return;
 	}

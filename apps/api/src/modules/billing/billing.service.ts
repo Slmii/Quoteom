@@ -1,5 +1,12 @@
 import type { EnvSchema } from '@/config/env.schema';
 import {
+	noStripeCustomerForOrg,
+	STRIPE_CHECKOUT_URL_MISSING,
+	STRIPE_PRICE_ID_MISSING,
+	STRIPE_SECRET_KEY_MISSING,
+	subscriptionAlreadyActive
+} from '@/lib/errors';
+import {
 	LIVE_SUBSCRIPTION_STATUSES,
 	LOCAL_TRIAL_MS,
 	PER_SEAT_OVERAGE_CENTS,
@@ -50,7 +57,7 @@ export class BillingService {
 	) {
 		const secretKey = this.config.get('STRIPE_SECRET_KEY', { infer: true });
 		if (!secretKey) {
-			throw new Error('STRIPE_SECRET_KEY is not set');
+			throw new Error(STRIPE_SECRET_KEY_MISSING);
 		}
 
 		// Pin the API version. Bumping is a deliberate decision documented in the upgrade
@@ -139,7 +146,7 @@ export class BillingService {
 	async createCheckoutSession(organizationId: string): Promise<{ url: string }> {
 		const priceId = this.config.get('STRIPE_PRICE_ID', { infer: true });
 		if (!priceId) {
-			throw new InternalServerErrorException('STRIPE_PRICE_ID is not configured');
+			throw new InternalServerErrorException(STRIPE_PRICE_ID_MISSING);
 		}
 
 		// Enforce one live subscription per org. The UI hides the Subscribe button in these
@@ -152,9 +159,7 @@ export class BillingService {
 		});
 
 		if (existing?.status && LIVE_SUBSCRIPTION_STATUSES.includes(existing.status)) {
-			throw new ConflictException(
-				`Organization already has an active subscription (${existing.status}). Use the Customer Portal to manage it.`
-			);
+			throw new ConflictException(subscriptionAlreadyActive(existing.status));
 		}
 
 		const customerId = await this.getOrCreateCustomer(organizationId);
@@ -190,7 +195,7 @@ export class BillingService {
 		});
 
 		if (!session.url) {
-			throw new InternalServerErrorException('Stripe did not return a checkout URL');
+			throw new InternalServerErrorException(STRIPE_CHECKOUT_URL_MISSING);
 		}
 
 		return { url: session.url };
@@ -210,7 +215,7 @@ export class BillingService {
 			where: { organizationId }
 		});
 		if (!sub) {
-			throw new InternalServerErrorException(`No Stripe customer exists for organization ${organizationId}`);
+			throw new InternalServerErrorException(noStripeCustomerForOrg(organizationId));
 		}
 
 		const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });

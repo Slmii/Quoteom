@@ -8,7 +8,7 @@ import type { EnvSchema } from '@/config/env.schema';
 import { authConfig } from '@/modules/auth/auth.config';
 import { LogService } from '@/modules/logger/log.service';
 import { ExpressAuth } from '@auth/express';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -62,8 +62,9 @@ async function bootstrap() {
 	const port = config.get('API_PORT', { infer: true });
 	await app.listen(port);
 
-	console.log(`API listening on http://localhost:${port}`);
-	console.log(`Swagger docs at http://localhost:${port}/docs`);
+	const bootLog = new Logger('Bootstrap');
+	bootLog.log(`API listening on http://localhost:${port}`);
+	bootLog.log(`Swagger docs at http://localhost:${port}/docs`);
 }
 
 bootstrap();

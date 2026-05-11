@@ -1,3 +1,4 @@
+import { NOT_AUTHENTICATED } from '@/lib/errors';
 import { authConfig } from '@/modules/auth/auth.config';
 import { getSession } from '@auth/express';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
@@ -12,7 +13,7 @@ export class AuthGuard implements CanActivate {
 		const session = request.authSession ?? (await getSession(request, authConfig));
 
 		if (!session?.user) {
-			throw new UnauthorizedException('Not authenticated');
+			throw new UnauthorizedException(NOT_AUTHENTICATED);
 		}
 
 		request.authSession = session;

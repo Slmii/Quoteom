@@ -1,3 +1,4 @@
+import { NO_ACTIVE_ORGANIZATION } from '@/lib/errors';
 import { AuthGuard } from '@/modules/auth/auth.guard';
 import { ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
@@ -18,9 +19,7 @@ export class OrganizationGuard extends AuthGuard {
 		const organizationId = request.authSession?.user?.organizationId;
 
 		if (!organizationId) {
-			throw new ForbiddenException(
-				'No active organization. You must be a member of an organization to access this route.'
-			);
+			throw new ForbiddenException(NO_ACTIVE_ORGANIZATION);
 		}
 
 		request.organizationId = organizationId;
