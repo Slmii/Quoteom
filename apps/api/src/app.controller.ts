@@ -1,4 +1,5 @@
-import { AppService, type HelloResponse } from '@/app.service';
+import { AppService } from '@/app.service';
+import type { HelloResponse } from '@/lib/interfaces/hello';
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 

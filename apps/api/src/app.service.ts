@@ -1,9 +1,5 @@
+import type { HelloResponse } from '@/lib/interfaces/hello';
 import { Injectable } from '@nestjs/common';
-
-export interface HelloResponse {
-	message: string;
-	timestamp: string;
-}
 
 @Injectable()
 export class AppService {
