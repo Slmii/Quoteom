@@ -210,3 +210,29 @@ Quick scenarios:
 - `stripe subscriptions cancel sub_XXX` — kill an active sub to test resubscribe.
 
 See `TEST_CASES.md` for the full Stripe / billing test catalog (BILLING-01..25, INV-01..17, etc.).
+
+## Inngest dev workflow (W3.3+)
+
+The API exposes `/api/inngest` (mounted in `main.ts`, same pattern as Auth.js). Functions live in `apps/api/src/modules/inngest/functions/` and register via the array in `functions/index.ts`.
+
+Local dev needs the Inngest CLI running alongside the API:
+
+```bash
+# Terminal 1
+npm run dev                                              # API + web
+
+# Terminal 2
+npx inngest-cli@latest dev                               # discovers /api/inngest
+# Open http://localhost:8288 — every registered function shows up here.
+```
+
+The CLI dev server handles auth at the localhost boundary, so `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` stay empty in dev. They're required in production (Inngest Cloud → Settings → Keys).
+
+Smoke checks:
+- **Manual event** → in the dev UI: New event → `{"name": "test/hello", "data": {"name": "Quoteom"}}` → run history shows the `hello` fn output `{ "greeting": "Hello, Quoteom!" }`.
+- **Scheduled cron** → `heartbeat` fires at `0 * * * *`. In the dev UI use "Invoke" to bypass the cron and trigger it manually.
+
+Adding a new function:
+1. Create `apps/api/src/modules/inngest/functions/<name>.function.ts` exporting an `InngestFunction.Any`-typed constant.
+2. Add the import + export to `functions/index.ts`.
+3. Reload the API — the dev UI picks it up on the next discovery poll.

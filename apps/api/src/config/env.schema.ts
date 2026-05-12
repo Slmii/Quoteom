@@ -51,7 +51,15 @@ export const envSchema = z.object({
 	// Stripe billing
 	STRIPE_SECRET_KEY: z.string().optional(),
 	STRIPE_PRICE_ID: z.string().optional(),
-	STRIPE_WEBHOOK_SECRET: z.string().optional()
+	STRIPE_WEBHOOK_SECRET: z.string().optional(),
+
+	// Inngest — workers + scheduled jobs
+	// In dev the Inngest CLI (`npx inngest-cli@latest dev`) handles auth at the localhost
+	// boundary, so both of these may be empty. In production:
+	//  - INNGEST_EVENT_KEY  → required when sending events to Inngest Cloud.
+	//  - INNGEST_SIGNING_KEY → required for the cloud handler to verify it's really us.
+	INNGEST_EVENT_KEY: z.string().optional(),
+	INNGEST_SIGNING_KEY: z.string().optional()
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;

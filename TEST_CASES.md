@@ -631,6 +631,26 @@ Setup once: in Google Cloud Console, register an OAuth client with TWO authorize
 - [ ] **Expect** in API logs: one `WARN` line containing `refresh token rejected by Google — deleting row for org ...`, no `ERROR` lines.
 - [ ] **Counter-test:** simulate a non-`invalid_grant` 400 by setting `GOOGLE_CLIENT_SECRET` to a wrong value briefly + repeating the steps. The row should NOT be deleted (the body says `invalid_client`, not `invalid_grant`); status read 500s instead. Restore the correct secret afterwards.
 
+### INNGEST-01: Discovery endpoint returns the registered function list
+- [ ] With the API running, hit `GET http://localhost:3001/api/inngest` (browser or curl).
+- [ ] **Expect** JSON containing `"functions"` array with at least `hello` and `heartbeat` entries. Their `triggers` field reflects what the source code declares (`test/hello` event for hello, `0 * * * *` cron for heartbeat).
+
+### INNGEST-02: Hello smoke fires end-to-end
+- [ ] Terminal A: `npm run dev` (API up).
+- [ ] Terminal B: `npx inngest-cli@latest dev` → prints "Inngest dev server is up" at `http://localhost:8288`.
+- [ ] In the dev UI **Functions** tab: `hello` and `heartbeat` both visible. CLI auto-discovered them via `/api/inngest`.
+- [ ] In the dev UI: **New event** → name `test/hello` → data `{"name": "Quoteom"}` → **Send**.
+- [ ] **Expect** **Runs** tab: one run, status **Completed**, output `{"greeting": "Hello, Quoteom!"}`. API logs include `[InngestFn:hello] hello fn fired: Hello, Quoteom!`.
+- [ ] Invoke the same event from the API by calling `inngest.send(...)` from a controller (deferred — happens naturally once W3.4 triggers backfill jobs).
+
+### INNGEST-03: Scheduled function fires on cron + can be force-invoked
+- [ ] In the dev UI Functions tab → `heartbeat` → **Invoke** → confirm.
+- [ ] **Expect** Runs tab: a completed run with output `{ ok: true, at: "<iso>" }`. API logs include `[InngestFn:heartbeat] heartbeat tick at ...`.
+- [ ] Leave the dev server running across an hour boundary — at `:00` UTC a fresh run appears automatically. (For faster verification, edit the cron temporarily to `* * * * *` and reload — restore before committing.)
+
+### INNGEST-04: Auth.js + Inngest don't collide on /api/* mounting
+- [ ] Confirm `GET /api/auth/session` still returns the session (Auth.js) and `GET /api/inngest` returns the function list (Inngest). Both are app-level Express middleware mounted before NestJS pipes — order in `main.ts` is `/api/auth` then `/api/inngest`. Adding a NestJS controller for either prefix would shadow them and break this test.
+
 ### EMAIL-10b: Self-heal when user revokes app at Google (cached token still "fresh")
 The scenario EMAIL-10 misses: the user revokes our app within the access-token's 1 h cache window, so our `accessTokenExpiresAt` doesn't trigger a refresh attempt. The first signal is a 401 from the Gmail API itself.
 - [ ] Connect Gmail (EMAIL-01). Verify `SELECT "accessTokenExpiresAt" FROM "EmailAccount";` is ~1 h in the future — do **not** force-expire it.

@@ -4,6 +4,7 @@ import { validateEnv } from '@/config/env.schema';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BillingModule } from '@/modules/billing/billing.module';
 import { GmailModule } from '@/modules/gmail/gmail.module';
+import { InngestModule } from '@/modules/inngest/inngest.module';
 import { InvitationsModule } from '@/modules/invitations/invitations.module';
 import { LogModule } from '@/modules/logger/log.module';
 import { MeModule } from '@/modules/me/me.module';
@@ -39,7 +40,8 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 		InvitationsModule,
 		MeModule,
 		BillingModule,
-		GmailModule
+		GmailModule,
+		InngestModule
 	],
 	controllers: [AppController],
 	providers: [AppService, PrismaService, { provide: APP_GUARD, useClass: ThrottlerGuard }]
