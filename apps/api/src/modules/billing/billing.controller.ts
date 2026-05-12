@@ -6,6 +6,7 @@ import {
 	STRIPE_WEBHOOK_SECRET_MISSING
 } from '@/lib/errors';
 import { OrganizationGuard } from '@/modules/auth/organization.guard';
+import { OwnerGuard } from '@/modules/auth/owner.guard';
 import { BillingService } from '@/modules/billing/billing.service';
 import { BillingStatusResponseDto } from '@/modules/billing/dto/billing-status.response.dto';
 import {
@@ -44,6 +45,8 @@ export class BillingController {
 
 	@ApiOperation({ summary: 'Current billing state for the active organization' })
 	@ApiOkResponse({ type: BillingStatusResponseDto })
+	// Read-only: any member can see trial countdown / plan / seat usage. Only owners can
+	// act on it (checkout / portal / sync — all guarded with `OwnerGuard` below).
 	@UseGuards(OrganizationGuard)
 	@Get('status')
 	async getStatus(@Req() request: Request): Promise<BillingStatusResponseDto> {
@@ -52,7 +55,7 @@ export class BillingController {
 
 	@ApiOperation({ summary: 'Create a Stripe Checkout session for the active organization' })
 	@ApiOkResponse({ type: CheckoutSessionResponseDto })
-	@UseGuards(OrganizationGuard)
+	@UseGuards(OwnerGuard)
 	@Post('checkout-session')
 	async createCheckoutSession(@Req() request: Request): Promise<CheckoutSessionResponseDto> {
 		return this.billing.createCheckoutSession(request.organizationId!);
@@ -60,7 +63,7 @@ export class BillingController {
 
 	@ApiOperation({ summary: 'Create a Stripe Customer Portal session for self-service management' })
 	@ApiOkResponse({ type: CheckoutSessionResponseDto })
-	@UseGuards(OrganizationGuard)
+	@UseGuards(OwnerGuard)
 	@Post('portal-session')
 	async createPortalSession(@Req() request: Request): Promise<CheckoutSessionResponseDto> {
 		return this.billing.createPortalSession(request.organizationId!);
@@ -68,7 +71,7 @@ export class BillingController {
 
 	@ApiOperation({ summary: 'Refresh subscription state from Stripe after checkout success' })
 	@ApiOkResponse({ type: BillingSyncResponseDto })
-	@UseGuards(OrganizationGuard)
+	@UseGuards(OwnerGuard)
 	@HttpCode(HttpStatus.OK)
 	@Post('sync')
 	async syncAfterSuccess(@Req() request: Request): Promise<BillingSyncResponseDto> {

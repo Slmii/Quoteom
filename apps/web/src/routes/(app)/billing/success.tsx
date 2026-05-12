@@ -1,4 +1,4 @@
-import { useSyncBilling } from '@/lib/queries/billing';
+import { useSyncBilling } from '@/lib/queries/billing.queries';
 import { BillingSearchSchema } from '@/lib/schemas/billing.schema';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';

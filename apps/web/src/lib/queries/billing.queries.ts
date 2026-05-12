@@ -12,7 +12,7 @@ interface BillingSyncResponse {
 	status: string | null;
 }
 
-const BillingKeys = {
+export const BillingKeys = {
 	status: ['billing', 'status'] as const
 };
 

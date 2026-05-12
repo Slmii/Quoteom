@@ -99,6 +99,61 @@ COOKIES=/tmp/quoteom.cookies
 - [ ] POST accept with `{}` (missing field).
 - [ ] **Expect** HTTP 400.
 
+### INV-08: Create invitation via UI (`/team`)
+- [ ] Sign in as an org owner with ≤ `SEATS_INCLUDED - 1` existing seats.
+- [ ] Navigate to `/team` → fill the email field → click **Send invite**.
+- [ ] **Expect** HTTP 200; success Alert appears; email arrives via Resend (or magic-link-style fallback log in dev); the row shows up under **Pending invitations**; billing status panel's seats count includes the pending invite.
+- [ ] **Expect** `GET /api/invitations` returns the new invitation in the JSON list.
+
+### INV-09: Validation rejects bad email
+- [ ] On `/team`, submit `not-an-email` as the address.
+- [ ] **Expect** HTTP 400 from `POST /api/invitations` with class-validator error: `email must be an email`; UI shows the error in an error Alert.
+
+### INV-10: Revoke a pending invitation
+- [ ] On `/team`, click the **×** button next to a pending invitation.
+- [ ] **Expect** HTTP 204; row disappears from the list on the next refetch; the `Invitation` table no longer has the row (deleted, not just marked).
+- [ ] Calling DELETE on a non-existent / cross-org invitation returns 404 (`INVITATION_NOT_FOUND`).
+- [ ] Calling DELETE on an already-accepted invitation returns 409 (`INVITATION_ALREADY_ACCEPTED`).
+
+### INV-12: Reject invite to an existing member
+- [ ] Org has Alice as an active member. From `/team`, try to invite `alice@example.com` again.
+- [ ] **Expect** HTTP 409 with message `This person is already a member of the organization`; UI shows the error in an error Alert.
+- [ ] Try with `ALICE@example.com` (different case) → same 409 (comparison is case-insensitive).
+
+### INV-16: Only owners can create or revoke invitations
+- [ ] Sign in as a `MEMBER` of an org. Visit `/team`.
+- [ ] **Expect** the page loads (memberships + pending invitations + status all visible).
+- [ ] **Expect** the "Invite a teammate" section is replaced by a caption: `Only the organization owner can invite teammates.`
+- [ ] **Expect** pending invitations have no revoke (×) button when rendered for a non-owner.
+- [ ] `curl -i -X POST http://localhost:3001/api/invitations -b cookies-of-member.txt -H "Content-Type: application/json" -d '{"email":"x@y.com"}'` → HTTP **403** (`OWNER_ROLE_REQUIRED`).
+- [ ] `curl -i -X DELETE http://localhost:3001/api/invitations/<id> -b cookies-of-member.txt` → HTTP **403**.
+- [ ] `GET /api/invitations` (list) still returns **200** for members — read access stays open.
+- [ ] Repeat as the OWNER: invite form is rendered, revoke buttons are clickable, both POST + DELETE succeed.
+
+### INV-15: Email is normalized to lowercase on invitation create + accept
+- [ ] From `/team`, invite `John.Doe@Example.com` (mixed case).
+- [ ] **Expect** the `Invitation` row stores `email = 'john.doe@example.com'`; UI pending list shows the lowercased form.
+- [ ] Recipient clicks the link → accept → **expect** `User.email = 'john.doe@example.com'` (lowercased, no mixed-case row created).
+- [ ] **Legacy data**: if a `User` row already exists with `email = 'John.Doe@Example.com'` (created before this normalization landed), accepting an invitation for `john.doe@example.com` should find the existing user (case-insensitive lookup), not throw `Unique constraint failed on (email)`.
+- [ ] Invite the same address twice in different casings → 409 `INVITATION_ALREADY_PENDING` (the duplicate check is case-insensitive).
+
+### INV-14: Reject OWNER role on invitation (DTO + service)
+- [ ] On `/team`, confirm the role dropdown shows only **Member** and **External** (no Owner option).
+- [ ] Via curl: `curl -X POST http://localhost:3001/api/invitations -b cookies.txt -H "Content-Type: application/json" -d '{"email":"new@example.com","role":"OWNER"}'`.
+- [ ] **Expect** HTTP 400 with class-validator message `Owner role cannot be assigned via invitation — every organization has exactly one owner` (from `OWNER_ROLE_NOT_INVITABLE`).
+- [ ] Garbage role like `"role":"SUPERADMIN"` → 400 with `@IsEnum` generic message ("role must be one of the following values: …").
+
+### INV-13: Reject invite when a pending invitation already exists for that email
+- [ ] Org sent an invite to `pending@example.com` 10 minutes ago (still un-accepted, un-expired). Try to invite the same address again.
+- [ ] **Expect** HTTP 409 with message `An invitation for this email is already pending`; UI shows the error Alert.
+- [ ] Revoke the pending invitation → re-inviting the same address now succeeds (HTTP 200).
+- [ ] Backdate the original invitation's `expiresAt` to a past date → re-inviting the same address succeeds (expired invitations don't block).
+
+### INV-11: Pending invitations list is tenant-scoped
+- [ ] As Acme org owner, `curl -b $COOKIES http://localhost:3001/api/invitations`.
+- [ ] **Expect** only Acme's pending (un-accepted, un-expired) invitations.
+- [ ] Switch the active org or sign in as a different tenant → list contains none of Acme's invitations.
+
 ---
 
 ## Tenancy (W2.2)
@@ -359,6 +414,20 @@ Pre-requisite: API running (`cd apps/api && npm run dev`) AND web running (`cd a
 - [ ] Brand-new org, never hit Checkout. Invite + accept a 2nd member.
 - [ ] **Expect** no Stripe API calls (`stripe listen` shows nothing); API logs do **not** include a "Seat sync" line.
 - [ ] **Expect** `/billing` shows local_trial state + accurate seat count.
+
+### BILLING-OWNER-01: Non-owners cannot access billing actions
+- [ ] Sign in as a `MEMBER` (or `EXTERNAL`) of an org.
+- [ ] **Expect** home page: no **Billing** button (only **Team** + **Sign out**).
+- [ ] Manually navigate to `/billing` → TanStack Router `beforeLoad` redirects to `/`.
+- [ ] `curl -i http://localhost:3001/api/billing/status -b cookies-of-member.txt` → HTTP **200** (status is read-only and any member can see trial countdown / seat usage on `/team`).
+- [ ] `curl -i -X POST http://localhost:3001/api/billing/checkout-session -b cookies-of-member.txt` → HTTP **403** from `OwnerGuard` with message `Only the organization owner can access this resource`.
+- [ ] Same 403 for `POST /api/billing/{portal-session,sync}`.
+- [ ] Webhook (`POST /api/billing/webhook`) remains unauthenticated — Stripe signature alone gates it.
+- [ ] On `/team` as a non-owner with the org at trial seat cap: the alert shows **"Ask your owner to subscribe"** (no Subscribe button); owners see the **Subscribe** action button.
+
+### BILLING-OWNER-02: Owner can access billing
+- [ ] Sign in as the org `OWNER`. Home page shows the Billing button. Visit `/billing` → loads normally.
+- [ ] `curl -i http://localhost:3001/api/billing/status -b cookies-of-owner.txt` → HTTP 200 with the full status DTO.
 
 ### BILLING-22: Trial seat cap — block invites past included tier
 - [ ] Fresh org, no Subscription yet (local_trial). Owner = 1 active member.

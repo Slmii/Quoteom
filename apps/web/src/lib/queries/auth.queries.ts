@@ -3,7 +3,7 @@ import { api, postForm } from '@/lib/api/client';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 
-const AuthKeys = {
+export const AuthKeys = {
 	session: ['auth', 'session'] as const
 };
 

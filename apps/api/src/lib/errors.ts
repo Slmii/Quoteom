@@ -15,6 +15,7 @@
 export const ORGANIZATION_NOT_FOUND = 'Organization not found';
 export const NO_ACTIVE_ORGANIZATION =
 	'No active organization. You must be a member of an organization to access this route.';
+export const MEMBERSHIP_NOT_FOUND = 'Membership not found in the active organization';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Invitations (User-facing)
@@ -22,13 +23,17 @@ export const NO_ACTIVE_ORGANIZATION =
 export const INVITATION_NOT_FOUND = 'Invitation not found';
 export const INVITATION_EXPIRED = 'Invitation expired';
 export const INVITATION_ALREADY_ACCEPTED = 'Invitation has already been accepted';
-export const USER_ALREADY_MEMBER = 'User is already a member of the organization';
+export const INVITATION_ALREADY_PENDING = 'An invitation for this email is already pending';
+export const USER_ALREADY_MEMBER = 'This person is already a member of the organization';
+export const OWNER_ROLE_NOT_INVITABLE =
+	'Owner role cannot be assigned via invitation — every organization has exactly one owner';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Auth
 // ────────────────────────────────────────────────────────────────────────────
 // User-facing
 export const NOT_AUTHENTICATED = 'Not authenticated';
+export const OWNER_ROLE_REQUIRED = 'Only the organization owner can access this resource';
 // Dev-facing (raised inside Auth.js signIn callback; never surfaces in a response)
 export const SELF_SIGNUP_DISABLED = 'User self-signup is disabled. Users must be invited.';
 

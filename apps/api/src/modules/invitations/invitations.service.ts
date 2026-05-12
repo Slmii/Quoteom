@@ -2,18 +2,23 @@ import type { EnvSchema } from '@/config/env.schema';
 import { MembershipRole } from '@/generated/prisma/client';
 import {
 	INVITATION_ALREADY_ACCEPTED,
+	INVITATION_ALREADY_PENDING,
 	INVITATION_EXPIRED,
 	INVITATION_NOT_FOUND,
 	ORGANIZATION_NOT_FOUND,
-	trialSeatLimitReached
+	OWNER_ROLE_NOT_INVITABLE,
+	trialSeatLimitReached,
+	USER_ALREADY_MEMBER
 } from '@/lib/errors';
 import { buildInviteEmail } from '@/lib/mails/invite.email';
 import { sendEmail } from '@/lib/mails/send';
 import { SEATS_INCLUDED, TRIAL_SEAT_LIMIT_CODE, TRIAL_STATES } from '@/modules/billing/billing.constants';
 import { BillingService } from '@/modules/billing/billing.service';
+import { AcceptInvitationResponseDto } from '@/modules/invitations/dto/accept-invitation.response.dto';
+import { InvitationResponseDto } from '@/modules/invitations/dto/invitation.response.dto';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { ConfigService } from '@nestjs/config';
 import {
+	BadRequestException,
 	ConflictException,
 	GoneException,
 	HttpException,
@@ -21,6 +26,7 @@ import {
 	Injectable,
 	NotFoundException
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'node:crypto';
 
 const INVITATION_TTL_DAYS = 7;
@@ -32,13 +38,6 @@ interface CreateInvitationInput {
 	role?: MembershipRole;
 }
 
-export interface AcceptResult {
-	userId: string;
-	email: string;
-	organizationId: string;
-	organizationName: string;
-}
-
 @Injectable()
 export class InvitationsService {
 	constructor(
@@ -47,7 +46,14 @@ export class InvitationsService {
 		private readonly billing: BillingService
 	) {}
 
-	async create(input: CreateInvitationInput): Promise<{ id: string; token: string }> {
+	async create(input: CreateInvitationInput): Promise<InvitationResponseDto> {
+		// Normalize once at the boundary. Emails are case-insensitive in practice (RFC 5321
+		// allows case-sensitive local parts but no real mail server treats them that way),
+		// and Postgres's unique constraint is case-sensitive — so storing mixed case would
+		// produce phantom duplicates. Lowercase everywhere on write; lookups stay
+		// case-insensitive defensively.
+		const email = input.email.trim().toLowerCase();
+
 		const organization = await this.prisma.organization.findUnique({
 			where: { id: input.organizationId }
 		});
@@ -56,6 +62,13 @@ export class InvitationsService {
 			throw new NotFoundException(ORGANIZATION_NOT_FOUND);
 		}
 
+		// Defensive: DTO validation already rejects OWNER, but keep the service-level guard
+		// so internal/admin callers that bypass the controller can't break the invariant.
+		if (input.role === MembershipRole.OWNER) {
+			throw new BadRequestException(OWNER_ROLE_NOT_INVITABLE);
+		}
+
+		await this.assertEmailNotTaken(email, input.organizationId);
 		await this.assertSeatBudget(input.organizationId);
 
 		const token = randomBytes(INVITATION_TOKEN_BYTES).toString('hex');
@@ -64,7 +77,7 @@ export class InvitationsService {
 		const invitation = await this.prisma.invitation.create({
 			data: {
 				token,
-				email: input.email,
+				email,
 				organizationId: input.organizationId,
 				role: input.role ?? MembershipRole.MEMBER,
 				expiresAt
@@ -79,17 +92,57 @@ export class InvitationsService {
 		});
 
 		await sendEmail({
-			to: input.email,
+			to: email,
 			subject,
 			html,
 			text,
-			devFallbackLog: `Invite for ${input.email} to ${organization.name}:\n  ${url}`
+			devFallbackLog: `Invite for ${email} to ${organization.name}:\n  ${url}`
 		});
 
-		return { id: invitation.id, token: invitation.token };
+		return {
+			id: invitation.id,
+			email: invitation.email,
+			role: invitation.role,
+			expiresAt: invitation.expiresAt,
+			createdAt: invitation.createdAt
+		};
 	}
 
-	async accept(token: string): Promise<AcceptResult> {
+	/** Pending = not yet accepted and not yet expired. Powers the /team UI list. */
+	async listPending(organizationId: string): Promise<InvitationResponseDto[]> {
+		const rows = await this.prisma.invitation.findMany({
+			where: {
+				organizationId,
+				acceptedAt: null,
+				expiresAt: { gt: new Date() }
+			},
+			orderBy: { createdAt: 'desc' },
+			select: {
+				id: true,
+				email: true,
+				role: true,
+				expiresAt: true,
+				createdAt: true
+			}
+		});
+		return rows;
+	}
+
+	/** Revoke a pending invitation. No-op if already accepted (idempotent on the UI side). */
+	async revoke(invitationId: string, organizationId: string): Promise<void> {
+		const invitation = await this.prisma.invitation.findUnique({
+			where: { id: invitationId }
+		});
+		if (!invitation || invitation.organizationId !== organizationId) {
+			throw new NotFoundException(INVITATION_NOT_FOUND);
+		}
+		if (invitation.acceptedAt) {
+			throw new ConflictException(INVITATION_ALREADY_ACCEPTED);
+		}
+		await this.prisma.invitation.delete({ where: { id: invitationId } });
+	}
+
+	async accept(token: string): Promise<AcceptInvitationResponseDto> {
 		const invitation = await this.prisma.invitation.findUnique({
 			where: { token },
 			include: { organization: true }
@@ -107,15 +160,25 @@ export class InvitationsService {
 			throw new GoneException(INVITATION_EXPIRED);
 		}
 
+		const normalizedEmail = invitation.email.trim().toLowerCase();
+
 		const result = await this.prisma.$transaction(async tx => {
-			const user = await tx.user.upsert({
-				where: { email: invitation.email },
-				update: {},
-				create: {
-					email: invitation.email,
-					currentOrganizationId: invitation.organizationId
-				}
+			// Case-insensitive lookup so legacy rows with mixed-case emails still match.
+			// `findUnique` is case-sensitive on a plain text unique index, so combine an
+			// insensitive `findFirst` (handles legacy data) with an explicit create when
+			// no row exists.
+			const existing = await tx.user.findFirst({
+				where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
 			});
+
+			const user =
+				existing ??
+				(await tx.user.create({
+					data: {
+						email: normalizedEmail,
+						currentOrganizationId: invitation.organizationId
+					}
+				}));
 
 			// First-time user with no active org → pin to this one.
 			if (!user.currentOrganizationId) {
@@ -147,7 +210,7 @@ export class InvitationsService {
 
 			return {
 				userId: user.id,
-				email: invitation.email,
+				email: normalizedEmail,
 				organizationId: invitation.organizationId,
 				organizationName: invitation.organization.name
 			};
@@ -159,6 +222,43 @@ export class InvitationsService {
 		await this.billing.syncSeatCount(result.organizationId);
 
 		return result;
+	}
+
+	/**
+	 * Reject duplicate invitations for an email that's already a member or already has a
+	 * pending invitation on this org. Case-insensitive — Auth.js stores email as-typed,
+	 * but treat `John@Example.com` and `john@example.com` as the same person.
+	 *
+	 * Expired pending invitations are intentionally ignored: re-inviting after expiry is
+	 * the expected recovery path, not a duplicate.
+	 */
+	private async assertEmailNotTaken(email: string, organizationId: string): Promise<void> {
+		const [existingMember, existingPending] = await Promise.all([
+			this.prisma.membership.findFirst({
+				where: {
+					organizationId,
+					user: { email: { equals: email, mode: 'insensitive' } }
+				},
+				select: { id: true }
+			}),
+			this.prisma.invitation.findFirst({
+				where: {
+					organizationId,
+					email: { equals: email, mode: 'insensitive' },
+					acceptedAt: null,
+					expiresAt: { gt: new Date() }
+				},
+				select: { id: true }
+			})
+		]);
+
+		if (existingMember) {
+			throw new ConflictException(USER_ALREADY_MEMBER);
+		}
+
+		if (existingPending) {
+			throw new ConflictException(INVITATION_ALREADY_PENDING);
+		}
 	}
 
 	/**

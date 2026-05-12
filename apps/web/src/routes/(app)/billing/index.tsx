@@ -1,4 +1,9 @@
-import { billingStatusQueryOptions, useOpenPortal, useStartCheckout, type BillingStatus } from '@/lib/queries/billing';
+import {
+	billingStatusQueryOptions,
+	useOpenPortal,
+	useStartCheckout,
+	type BillingStatus
+} from '@/lib/queries/billing.queries';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
