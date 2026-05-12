@@ -102,18 +102,20 @@ export const authConfig: ExpressAuthConfig = {
 
 			return WEB_ORIGIN;
 		},
-		// On sign-in, enrich the JWT with userId + currentOrganizationId so we don't have to
-		// hit the DB on every request. On subsequent requests `user` is undefined and we just
-		// pass the existing token through.
+		// On sign-in, enrich the JWT with `userId` so we don't have to hit the DB to look it
+		// up by email on every request. Active organization is NOT cached here — it's read
+		// fresh from `User.currentOrganizationId` by OrganizationGuard so switch-org takes
+		// effect immediately. On subsequent requests `user` is undefined and we just pass
+		// the existing token through.
 		async jwt({ token, user }) {
 			if (user?.email) {
 				const dbUser = await authPrisma.user.findUnique({
 					where: { email: user.email },
-					select: { id: true, currentOrganizationId: true }
+					select: { id: true }
 				});
+
 				if (dbUser) {
 					token.userId = dbUser.id;
-					token.organizationId = dbUser.currentOrganizationId;
 				}
 			}
 			return token;
@@ -123,8 +125,7 @@ export const authConfig: ExpressAuthConfig = {
 			if (token.userId) {
 				session.user = {
 					...session.user,
-					id: token.userId as string,
-					organizationId: (token.organizationId as string | null) ?? null
+					id: token.userId as string
 				};
 			}
 
@@ -146,7 +147,6 @@ declare module '@auth/core/types' {
 			email?: string | null;
 			name?: string | null;
 			image?: string | null;
-			organizationId: string | null;
 		};
 	}
 }
@@ -154,6 +154,5 @@ declare module '@auth/core/types' {
 declare module '@auth/core/jwt' {
 	interface JWT {
 		userId?: string;
-		organizationId?: string | null;
 	}
 }

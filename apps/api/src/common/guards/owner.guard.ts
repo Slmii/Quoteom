@@ -17,8 +17,8 @@ import type { Request } from 'express';
  */
 @Injectable()
 export class OwnerGuard extends OrganizationGuard {
-	constructor(private readonly prisma: PrismaService) {
-		super();
+	constructor(prisma: PrismaService) {
+		super(prisma);
 	}
 
 	override async canActivate(context: ExecutionContext): Promise<boolean> {

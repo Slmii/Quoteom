@@ -3,17 +3,27 @@ import {
 	getInvitationsServer,
 	getMembershipsServer,
 	getMyMembershipServer,
+	getMyOrganizationsServer,
 	type Invitation,
+	type Membership,
 	type MembershipRole
 } from '@/lib/api/team.api';
 import { BillingKeys } from '@/lib/queries/billing.queries';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from '@tanstack/react-router';
 
-export type { Invitation, Membership, MembershipRole, MembershipUser } from '@/lib/api/team.api';
+export type {
+	Invitation,
+	Membership,
+	MembershipOrganization,
+	MembershipRole,
+	MembershipUser
+} from '@/lib/api/team.api';
 
 const TeamKeys = {
 	memberships: ['team', 'memberships'] as const,
 	myMembership: ['team', 'my-membership'] as const,
+	myOrganizations: ['team', 'my-organizations'] as const,
 	invitations: ['team', 'invitations'] as const
 };
 
@@ -29,6 +39,32 @@ export const myMembershipQueryOptions = queryOptions({
 	queryFn: getMyMembershipServer,
 	staleTime: 30_000
 });
+
+/** All orgs the current user is a member of (for the org switcher). */
+export const myOrganizationsQueryOptions = queryOptions({
+	queryKey: TeamKeys.myOrganizations,
+	queryFn: getMyOrganizationsServer,
+	staleTime: 30_000
+});
+
+export function useSwitchOrganization() {
+	const queryClient = useQueryClient();
+	const router = useRouter();
+	return useMutation({
+		mutationFn: (organizationId: string) =>
+			api<Membership>('/api/me/switch-organization', {
+				method: 'POST',
+				body: { organizationId }
+			}),
+		onSuccess: async () => {
+			// Active-org context changed: every cached query is potentially stale.
+			// Cheapest correct thing is to nuke the cache + force the router to refetch
+			// its loaders. Subsequent loaders will see the new org via OrganizationGuard.
+			queryClient.clear();
+			await router.invalidate();
+		}
+	});
+}
 
 export const invitationsQueryOptions = queryOptions({
 	queryKey: TeamKeys.invitations,

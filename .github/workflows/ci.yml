@@ -31,3 +31,14 @@ jobs:
 
             - name: Lint
               run: npm run lint
+
+            - name: Test
+              run: npm run test
+
+            - name: Build
+              run: npm run build
+              env:
+                  # Vite reads VITE_API_URL at build time. Production VITE_API_URL is injected
+                  # by App Platform at runtime via `${APP_URL}`; this is just so the build
+                  # doesn't fail on an undefined value.
+                  VITE_API_URL: https://placeholder.invalid

@@ -9,6 +9,11 @@ export interface MembershipUser {
 	name: string | null;
 }
 
+export interface MembershipOrganization {
+	id: string;
+	name: string;
+}
+
 export interface Membership {
 	id: string;
 	userId: string;
@@ -17,6 +22,7 @@ export interface Membership {
 	createdAt: string;
 	updatedAt: string;
 	user: MembershipUser;
+	organization: MembershipOrganization;
 }
 
 export interface Invitation {
@@ -43,6 +49,15 @@ export const getMyMembershipServer = createServerFn({ method: 'GET' }).handler(a
 		throw new Error(`Failed to load current membership (${response.status})`);
 	}
 	return (await response.json()) as Membership;
+});
+
+/** GET /api/me/organizations — all orgs the current user is a member of (for the org switcher). */
+export const getMyOrganizationsServer = createServerFn({ method: 'GET' }).handler(async (): Promise<Membership[]> => {
+	const response = await serverFetch('/api/me/organizations');
+	if (!response.ok) {
+		throw new Error(`Failed to load organizations (${response.status})`);
+	}
+	return (await response.json()) as Membership[];
 });
 
 /** GET /api/invitations — pending invitations on the user's current org. */

@@ -38,7 +38,11 @@ function BillingPage() {
 					Manage your Quoteom subscription. €149/month after a 14-day free trial.
 				</Typography>
 
-				<StatusPanel status={status} />
+				<StatusPanel
+					status={status}
+					onOpenPortal={() => openPortal.mutate()}
+					portalOpening={openPortal.isPending}
+				/>
 
 				{(startCheckout.isError || openPortal.isError) && (
 					<Alert severity='error' sx={{ mb: 3, mt: 2 }}>
@@ -69,7 +73,7 @@ function BillingPage() {
 							onClick={() => openPortal.mutate()}
 							disabled={openPortal.isPending}
 						>
-							{openPortal.isPending ? 'Opening...' : 'Manage subscription'}
+							{openPortal.isPending ? 'Opening...' : portalLabel(status.state)}
 						</Button>
 					)}
 				</Box>
@@ -82,7 +86,15 @@ function BillingPage() {
 	);
 }
 
-function StatusPanel({ status }: { status: BillingStatus }) {
+function StatusPanel({
+	status,
+	onOpenPortal,
+	portalOpening
+}: {
+	status: BillingStatus;
+	onOpenPortal: () => void;
+	portalOpening: boolean;
+}) {
 	const { state, currentPeriodEnd, cancelAtPeriodEnd, paymentMethodBrand, paymentMethodLast4 } = status;
 	const endDate = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
 	const chip = stateChip(state);
@@ -107,9 +119,17 @@ function StatusPanel({ status }: { status: BillingStatus }) {
 			)}
 
 			{showCancellationBanner && (
-				<Alert severity='warning' sx={{ mt: 2 }}>
-					Cancellation scheduled for {formatDate(endDate)}. Open the Customer Portal to resume your
-					subscription before then.
+				<Alert
+					severity='warning'
+					sx={{ mt: 2 }}
+					action={
+						<Button color='inherit' size='small' onClick={onOpenPortal} disabled={portalOpening}>
+							{portalOpening ? 'Opening...' : 'Resume'}
+						</Button>
+					}
+				>
+					Cancellation scheduled for {formatDate(endDate)}. Resume your subscription before then to keep
+					access.
 				</Alert>
 			)}
 
@@ -283,4 +303,17 @@ function subscribeLabel(state: BillingStatus['state']): string {
 		return 'Start your 14-day trial';
 	}
 	return 'Subscribe';
+}
+
+// For terminal states the Portal can only show invoice history (no active sub to manage),
+// so the label changes to match. Everything else stays "Manage subscription".
+function portalLabel(state: BillingStatus['state']): string {
+	switch (state) {
+		case 'canceled':
+		case 'unpaid':
+		case 'incomplete_expired':
+			return 'View past invoices';
+		default:
+			return 'Manage subscription';
+	}
 }

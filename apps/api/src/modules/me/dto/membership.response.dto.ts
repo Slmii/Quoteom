@@ -6,6 +6,11 @@ export class MembershipUserDto {
 	name!: string | null;
 }
 
+export class MembershipOrganizationDto {
+	id!: string;
+	name!: string;
+}
+
 export class MembershipResponseDto {
 	id!: string;
 	userId!: string;
@@ -14,4 +19,5 @@ export class MembershipResponseDto {
 	createdAt!: Date;
 	updatedAt!: Date;
 	user!: MembershipUserDto;
+	organization!: MembershipOrganizationDto;
 }

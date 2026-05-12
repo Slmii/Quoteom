@@ -7,7 +7,6 @@ export interface Session {
 		email?: string | null;
 		name?: string | null;
 		image?: string | null;
-		organizationId: string | null;
 	};
 	expires: string;
 }

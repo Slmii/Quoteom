@@ -1,0 +1,28 @@
+# Local-only Postgres for development. Production uses DigitalOcean Managed Postgres
+# (provisioned via .do/app.yaml). Schema + migrations live under prisma/.
+#
+# Bring up:  `npm run db:up`   (alias for docker compose up -d, run from apps/api)
+# Tear down: `npm run db:down`
+# Connect:   `psql postgresql://quoteom:quoteom@localhost:5432/quoteom`
+
+services:
+    postgres:
+        image: postgres:16-alpine
+        container_name: quoteom-postgres
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: quoteom
+            POSTGRES_PASSWORD: quoteom
+            POSTGRES_DB: quoteom
+        ports:
+            - '5432:5432'
+        volumes:
+            - quoteom-pgdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U quoteom -d quoteom']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+volumes:
+    quoteom-pgdata:

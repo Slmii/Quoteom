@@ -13,7 +13,6 @@ import {
 	HttpCode,
 	HttpStatus,
 	Param,
-	ParseUUIDPipe,
 	Post,
 	Req,
 	UseGuards
@@ -50,7 +49,7 @@ export class InvitationsController {
 	@OwnerWrite()
 	@HttpCode(HttpStatus.NO_CONTENT)
 	@Delete(':id')
-	async revoke(@Req() request: Request, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+	async revoke(@Req() request: Request, @Param('id') id: string): Promise<void> {
 		await this.invitations.revoke(id, request.organizationId!);
 	}
 

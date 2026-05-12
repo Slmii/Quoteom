@@ -183,6 +183,25 @@ COOKIES=/tmp/quoteom.cookies
 - [ ] No cookies. `curl http://localhost:3001/api/me/memberships`
 - [ ] **Expect** HTTP 401 with `{ statusCode: 401, message: "Not authenticated" }`.
 
+### TEN-04: Switch organization for multi-org user
+- [ ] Seed a user with memberships in two orgs (Acme + BetaCo). Sign in.
+- [ ] `GET /api/me/organizations` → returns 2 rows, ordered by `createdAt asc`.
+- [ ] `GET /api/me/membership` → returns the membership of the **current** active org (Acme by default).
+- [ ] On the home page, an "Active organization" dropdown is rendered (only when ≥2 orgs); current value is Acme.
+- [ ] Pick BetaCo from the dropdown → mutation hits `POST /api/me/switch-organization { organizationId: <BetaCo-uuid> }` → 200.
+- [ ] **Expect** every query cache is wiped (`queryClient.clear()`) and the router invalidates → all loaders refetch.
+- [ ] **Expect** `GET /api/me/membership` now returns BetaCo's row. `GET /api/me/memberships` returns BetaCo's teammates.
+- [ ] **Expect** the `OrganizationGuard` reads `User.currentOrganizationId` fresh from DB on every request — no JWT refresh needed, no sign-in/out cycle.
+
+### TEN-05: Switch to an org the user isn't a member of → 404
+- [ ] As an Acme-only user: `curl -X POST -H "Content-Type: application/json" -b cookies.txt -d '{"organizationId":"<some-other-org-uuid>"}' http://localhost:3001/api/me/switch-organization`.
+- [ ] **Expect** HTTP 404 with message `Membership not found in the active organization` (reuses `MEMBERSHIP_NOT_FOUND` — 404 is also defensible because it doesn't reveal whether the target org exists).
+- [ ] DB `User.currentOrganizationId` is unchanged.
+
+### TEN-06: Single-org user — no switcher renders
+- [ ] Sign in as a user with exactly one membership.
+- [ ] **Expect** the home page shows "Active organization: **Acme**" as plain text (no dropdown). `me.organization.name` comes from `/api/me/membership`.
+
 ---
 
 ## Logging (W2.6)
@@ -431,6 +450,19 @@ Pre-requisite: API running (`cd apps/api && npm run dev`) AND web running (`cd a
 - [ ] Same 403 for `POST /api/billing/{portal-session,sync}`.
 - [ ] Webhook (`POST /api/billing/webhook`) remains unauthenticated — Stripe signature alone gates it.
 - [ ] On `/team` as a non-owner with the org at trial seat cap: the alert shows **"Ask your owner to subscribe"** (no Subscribe button); owners see the **Subscribe** action button.
+
+### BILLING-PORTAL-01: Portal button relabeled for terminal states
+- [ ] On `/billing` with `Subscription.status = 'active'` or `'trialing'`: button reads **"Manage subscription"**.
+- [ ] Cancel the sub immediately (BILLING-07b) → status flips to `canceled`. Button now reads **"View past invoices"** (no active sub to manage, only invoice history).
+- [ ] Same for `unpaid` and `incomplete_expired` (force via psql).
+- [ ] For `local_trial` / `expired`: the button is hidden entirely (no Stripe customer yet).
+
+### BILLING-PORTAL-02: Cancellation banner has a one-click Resume action
+- [ ] As owner with active sub: open Customer Portal → "Cancel subscription" → confirm "at period end".
+- [ ] **Expect** DB: `cancelAtPeriodEnd = true`, `status` still `active`.
+- [ ] **Expect** `/billing` status panel shows a warning Alert: *"Cancellation scheduled for {date}. Resume your subscription before then to keep access."* with a **Resume** button on the right.
+- [ ] Click **Resume** → opens Customer Portal directly (no scroll to find the main Manage button).
+- [ ] In Portal, click "Renew subscription" → webhook fires → `cancelAtPeriodEnd` flips to `false` → banner disappears on next status refetch.
 
 ### BILLING-OWNER-02: Owner can access billing
 - [ ] Sign in as the org `OWNER`. Home page shows the Billing button. Visit `/billing` → loads normally.

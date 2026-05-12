@@ -9,7 +9,7 @@
 		"start": "node .output/server/index.mjs",
 		"lint": "eslint src",
 		"typecheck": "tsc --noEmit",
-		"test": "vitest run"
+		"test": "vitest run --passWithNoTests"
 	},
 	"dependencies": {
 		"@emotion/cache": "^11.14.0",

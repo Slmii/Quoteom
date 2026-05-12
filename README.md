@@ -60,6 +60,84 @@ Root (runs across all apps via turbo):
 | `db:migrate`        | run dev migration         |
 | `db:studio`         | open Prisma Studio        |
 
-## Deployment
+## Deployment (DigitalOcean App Platform)
 
-See `.do/app.yaml` for the DigitalOcean App Platform spec.
+The app spec at `.do/app.yaml` describes everything: two services (api + web) behind one
+load balancer, a managed Postgres component, and a PRE_DEPLOY job that runs
+`prisma migrate deploy` before each release goes live. Routing inside the app is by path
+(`/api/*` → api component, `/` → web component) so both share the same hostname — no CORS
+configuration, cookies just work.
+
+### First-time setup
+
+Prerequisites: a DigitalOcean account and `doctl` CLI installed + authenticated.
+
+1. **Validate the spec locally:**
+   ```bash
+   doctl apps spec validate .do/app.yaml
+   ```
+
+2. **Create the app:**
+   ```bash
+   doctl apps create --spec .do/app.yaml
+   ```
+   Note the printed `App ID` — you'll need it for updates.
+
+3. **Set secrets in the Dashboard** (Apps → quoteom → Settings → App-Level Environment Variables). These can't be in the spec because they're secret values:
+   - `AUTH_SECRET` — generate with `openssl rand -base64 32`
+   - `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`
+   - `RESEND_API_KEY`
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (leave blank to disable that provider)
+   - `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` (leave blank to disable)
+
+   After the first deploy attempt these will be visible as empty SECRET fields; fill them in and trigger a new deploy.
+
+4. **Point Stripe webhooks** at `https://<your-app>.ondigitalocean.app/api/billing/webhook`. Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+5. **Custom domain** (optional): in App Platform Dashboard → Settings → Domains.
+
+### Updating the spec
+
+After editing `.do/app.yaml`:
+
+```bash
+doctl apps update <APP_ID> --spec .do/app.yaml
+```
+
+Pushing to `main` auto-deploys via `deploy_on_push: true` regardless of spec changes; you only need the explicit `update` when the spec itself changes (e.g. new env vars, scaling settings).
+
+### Rollback
+
+App Platform keeps the last several builds. To roll back:
+
+**Via Dashboard** (fastest):
+1. Apps → quoteom → Activity tab → find the last good deployment → click → **Rollback to this deployment**.
+
+**Via CLI:**
+```bash
+doctl apps list-deployments <APP_ID>            # find a good deployment id
+doctl apps create-deployment <APP_ID> \
+    --force-rebuild \
+    --restore-from-deployment <DEPLOYMENT_ID>
+```
+
+**Database migrations are not auto-reverted.** If a bad deploy ran a destructive migration, you have to write + apply a follow-up migration manually:
+
+```bash
+# In a local clone, generate a corrective migration:
+cd apps/api
+npx prisma migrate dev --name revert_<thing>
+# Push to main — the next PRE_DEPLOY job runs it against prod.
+```
+
+For schema changes that aren't safely reversible (dropping a column with live data), pause new deploys before merging:
+
+```bash
+doctl apps update-deployment-policy <APP_ID> --deploy-on-push=false
+```
+
+…investigate, then re-enable.
+
+### CI gate
+
+`.github/workflows/ci.yml` runs typecheck + lint + tests + build on every PR and push. Merges to `main` only proceed after CI is green; App Platform then picks up the commit and deploys.
