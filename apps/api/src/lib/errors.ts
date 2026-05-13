@@ -91,3 +91,39 @@ export const OAUTH_CODE_MISSING = 'OAuth callback is missing the authorization c
 export const OAUTH_TOKEN_EXCHANGE_FAILED = 'Failed to exchange OAuth code for tokens.';
 export const OAUTH_USERINFO_FAILED = 'Failed to fetch user info from the OAuth provider.';
 export const EMAIL_ACCOUNT_NOT_FOUND = 'No connected mail account for this organization.';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Microsoft Entra — admin-consent flow (User-facing — structured error code)
+// ────────────────────────────────────────────────────────────────────────────
+/**
+ * Stable error identifier surfaced on `/settings/email?error=microsoft_admin_consent_required`.
+ * The web client matches on this exact string to render the admin-consent CTA.
+ */
+export const MICROSOFT_ADMIN_CONSENT_REQUIRED = 'microsoft_admin_consent_required';
+
+/**
+ * Entra error codes that indicate the user's tenant admin must approve our app before any
+ * user in that tenant can connect a mailbox. We match these against the `error_description`
+ * query param Entra returns to our callback.
+ *
+ *  - AADSTS65001  — user/admin has not consented (org-wide user-consent disabled)
+ *  - AADSTS90094  — admin permission required for this scope
+ *  - AADSTS900971 — no reply address (admin-consent flow variant)
+ */
+export const MICROSOFT_ADMIN_CONSENT_ERROR_CODE_REGEX = /AADSTS(65001|90094|900971)\b/;
+
+/**
+ * Build the Entra admin-consent URL. The tenant admin opens this once; Entra grants the
+ * app's requested permissions to the whole tenant. After that any user in the tenant
+ * can complete the regular `/connect` flow without hitting the user-consent wall.
+ *
+ * Uses `common` as the tenant — Entra resolves the actual tenant from the admin's
+ * sign-in, so we don't need to know it in advance.
+ */
+export const buildMicrosoftAdminConsentUrl = (clientId: string, redirectUri: string): string => {
+	const params = new URLSearchParams({
+		client_id: clientId,
+		redirect_uri: redirectUri
+	});
+	return `https://login.microsoftonline.com/common/adminconsent?${params.toString()}`;
+};

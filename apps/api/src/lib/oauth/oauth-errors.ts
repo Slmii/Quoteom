@@ -28,6 +28,34 @@ export class OAuthRefreshTokenInvalidException extends Error {
 }
 
 /**
+ * Thrown when a Microsoft Entra OAuth redirect comes back with an "admin consent required"
+ * error code — the user attempted to connect a mailbox that lives in a work tenant whose
+ * admin has disabled user-level consent for Mail.* scopes.
+ *
+ * Distinct from a generic OAuth `error` because the recovery is product-specific: the
+ * tenant admin must approve our app once for the whole tenant via the `/adminconsent`
+ * endpoint, after which any user in that tenant can connect. We surface a structured
+ * code so the web client can render a "send your admin this link" CTA instead of the
+ * generic "the provider returned an error" Alert.
+ *
+ * Detected by matching `error_description` against the known Entra error codes:
+ *  - `AADSTS65001` — user or admin has not consented (org-wide user-consent disabled)
+ *  - `AADSTS90094` — admin permission required for this scope
+ *  - `AADSTS900971` — no reply address (admin-consent variant)
+ *
+ * Carries an `adminConsentUrl` so the controller doesn't have to rebuild it.
+ */
+export class MicrosoftAdminConsentRequiredException extends Error {
+	readonly adminConsentUrl: string;
+
+	constructor(adminConsentUrl: string, message = 'Microsoft Entra requires admin consent for this app') {
+		super(message);
+		this.name = 'MicrosoftAdminConsentRequiredException';
+		this.adminConsentUrl = adminConsentUrl;
+	}
+}
+
+/**
  * Thrown when a mailbox API call returns HTTP 401 (Invalid Credentials / Unauthorized).
  * The access token still looks fresh on our side (within its cached expiry window) but
  * the provider has revoked it upstream — most commonly because the user revoked our app

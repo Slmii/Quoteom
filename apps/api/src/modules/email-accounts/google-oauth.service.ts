@@ -62,10 +62,13 @@ export class GoogleOAuthService {
 			// `access_type=offline` is REQUIRED for Google to issue a refresh token.
 			// Without it we'd lose access the moment the first access token expires.
 			access_type: 'offline',
-			// `prompt=consent` forces the consent screen on every connect. Necessary so
-			// reconnecting after a disconnect re-issues a refresh token (Google returns
-			// `refresh_token` only on first consent unless we force re-consent).
-			prompt: 'consent',
+			// `select_account` shows the account picker even when the browser is already
+			// signed in with a Google account — users connecting Quoteom may want to use a
+			// work mailbox different from their primary signed-in account. `consent` then
+			// forces the consent screen so reconnecting after a disconnect re-issues a
+			// refresh token (Google returns `refresh_token` only on first consent unless we
+			// force re-consent). Space-separated prompt values are valid per RFC 8252.
+			prompt: 'select_account consent',
 			// `include_granted_scopes=true` so this consent merges with any already-granted
 			// scopes on the same client (e.g. the sign-in flow). Avoids stripping scopes.
 			include_granted_scopes: 'true',

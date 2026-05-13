@@ -240,7 +240,12 @@ export class EmailAccountsService {
 				this.logger.warn(
 					`${scope.provider} ${row.email} refresh token rejected — deleting row for org ${scope.organizationId} / user ${scope.userId}`
 				);
-				await this.prisma.emailAccount.delete({ where: { id: row.id } });
+				// `deleteMany` (not `delete`) so concurrent self-heal attempts don't collide:
+				// status + messages queries fire in parallel from the same page load and both
+				// can independently detect the stale token, both refresh, both hit
+				// `invalid_grant`, and both race to delete the same row. `delete` throws P2025
+				// for the loser; `deleteMany` is silent on zero rows.
+				await this.prisma.emailAccount.deleteMany({ where: { id: row.id } });
 				throw new NotFoundException(EMAIL_ACCOUNT_NOT_FOUND);
 			}
 			throw error;
@@ -312,7 +317,10 @@ export class EmailAccountsService {
 		const refreshToken = decrypt(row.refreshToken);
 		await this.oauthFor(scope.provider).revoke(refreshToken);
 
-		await this.prisma.emailAccount.delete({ where: { id: row.id } });
+		// `deleteMany` for the same reason as the self-heal path above: parallel disconnect
+		// requests (or a self-heal racing a user-initiated disconnect) would each find the
+		// row and both try to delete — `delete` throws P2025 for the loser.
+		await this.prisma.emailAccount.deleteMany({ where: { id: row.id } });
 		this.logger.log(
 			`${scope.provider} ${row.email} disconnected from org ${scope.organizationId} by user ${scope.userId}`
 		);

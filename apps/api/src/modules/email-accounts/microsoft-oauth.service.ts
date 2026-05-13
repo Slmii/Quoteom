@@ -1,5 +1,10 @@
 import type { EnvSchema } from '@/config/env.schema';
-import { MICROSOFT_OAUTH_NOT_CONFIGURED, OAUTH_TOKEN_EXCHANGE_FAILED, OAUTH_USERINFO_FAILED } from '@/lib/errors';
+import {
+	buildMicrosoftAdminConsentUrl,
+	MICROSOFT_OAUTH_NOT_CONFIGURED,
+	OAUTH_TOKEN_EXCHANGE_FAILED,
+	OAUTH_USERINFO_FAILED
+} from '@/lib/errors';
 import { OAuthRefreshTokenInvalidException } from '@/lib/oauth/oauth-errors';
 import {
 	MICROSOFT_GRAPH_BASE,
@@ -72,6 +77,18 @@ export class MicrosoftOAuthService {
 		return template.replace('{tenant}', tenant);
 	}
 
+	/**
+	 * Build the admin-consent URL for a tenant admin to one-shot approve our app for their
+	 * whole tenant. Called by the callback handler when Entra returns one of the
+	 * admin-consent-required error codes. The redirect URI must be the same one registered
+	 * in the Entra portal so the admin lands back on our /settings/email page after
+	 * granting consent.
+	 */
+	buildAdminConsentUrl(): string {
+		const { clientId, redirectUri } = this.credentials();
+		return buildMicrosoftAdminConsentUrl(clientId, redirectUri);
+	}
+
 	buildAuthorizeUrl(state: string): string {
 		const { clientId, redirectUri, tenant } = this.credentials();
 		const params = new URLSearchParams({
@@ -81,9 +98,12 @@ export class MicrosoftOAuthService {
 			response_mode: 'query',
 			scope: MICROSOFT_OAUTH_SCOPES.join(' '),
 			state,
-			// `prompt=consent` forces the consent screen on every connect so reconnect
-			// after disconnect always issues a refresh token. Same rationale as Gmail.
-			prompt: 'consent'
+			// `select_account` shows the account picker even when the browser is already
+			// signed in with a Microsoft account — users may want to connect a different
+			// mailbox than their primary signed-in account. `consent` then forces the
+			// consent screen so reconnecting after disconnect always re-issues a refresh
+			// token. Space-separated prompt values are valid per OIDC core 1.0 §3.1.2.1.
+			prompt: 'select_account'
 		});
 		return `${this.endpoint(MICROSOFT_OAUTH_AUTHORIZE_URL, tenant)}?${params.toString()}`;
 	}
@@ -206,7 +226,6 @@ export class MicrosoftOAuthService {
 	 * user manually revokes upstream first, our refresh fires `invalid_grant` and the
 	 * self-heal path deletes the row anyway.
 	 */
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	async revoke(_token: string): Promise<void> {
 		this.logger.log('Microsoft has no programmatic revoke — relying on local row delete.');
 	}

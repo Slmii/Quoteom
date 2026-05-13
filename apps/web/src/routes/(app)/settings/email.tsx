@@ -19,6 +19,7 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
+import MuiLink from '@mui/material/Link';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -28,7 +29,7 @@ import Typography from '@mui/material/Typography';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import dayjs from 'dayjs';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export const Route = createFileRoute('/(app)/settings/email')({
 	validateSearch: EmailSettingsSearchSchema,
@@ -89,10 +90,32 @@ function EmailSettingsPage() {
 	const billingEntitled = billing.state === 'trialing' || billing.state === 'active' || billing.state === 'past_due';
 	const isOwner = me.role === 'OWNER';
 
+	// OAuth callback params (`connected=1`, `error=…`, `adminConsentUrl=…`) are one-shot
+	// signals tied to the just-completed handshake. Capture them into local state on mount
+	// so the success/error UI and the post-connect polling loop survive — then strip them
+	// from the URL so a refresh doesn't keep the alerts visible. `replace: true` keeps the
+	// cleaned URL out of the browser history.
+	const [oauthFeedback] = useState(() => ({
+		connected: search.connected,
+		error: search.error,
+		adminConsentUrl: search.adminConsentUrl
+	}));
+
+	useEffect(() => {
+		if (!search.connected && !search.error && !search.adminConsentUrl) {
+			return;
+		}
+
+		void navigate({ to: '/settings/email', search: {}, replace: true });
+		// Run once on mount only — we intentionally do NOT depend on `search` because the
+		// effect's job is to clear the URL once, not to react to ongoing changes.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
 	// `connected=1` only ever fires once per OAuth round-trip; we can't tell from the
 	// URL which provider just connected, so the success Alert just says "connected"
 	// and the user sees which section is now green.
-	const showSuccessAlert = Boolean(search.connected === '1' && (gmailStatus.connected || msStatus.connected));
+	const showSuccessAlert = Boolean(oauthFeedback.connected === '1' && (gmailStatus.connected || msStatus.connected));
 
 	return (
 		<Container maxWidth='sm' sx={{ py: 8 }}>
@@ -116,10 +139,15 @@ function EmailSettingsPage() {
 					</Alert>
 				)}
 
-				{search.error && (
-					<Alert severity='error' sx={{ mb: 3 }}>
-						The provider returned an error: <strong>{search.error}</strong>. Try connecting again.
-					</Alert>
+				{oauthFeedback.error === 'microsoft_admin_consent_required' && oauthFeedback.adminConsentUrl ? (
+					<AdminConsentAlert adminConsentUrl={oauthFeedback.adminConsentUrl} />
+				) : (
+					oauthFeedback.error && (
+						<Alert severity='error' sx={{ mb: 3 }}>
+							The provider returned an error: <strong>{oauthFeedback.error}</strong>. Try connecting
+							again.
+						</Alert>
+					)
 				)}
 
 				{!billingEntitled && (
@@ -145,7 +173,7 @@ function EmailSettingsPage() {
 						status={gmailStatus}
 						disconnected={gmailMessages.disconnected}
 						messages={gmailMessages.messages.map(fromGmail)}
-						justConnected={search.connected === '1'}
+						justConnected={oauthFeedback.connected === '1'}
 						billingEntitled={billingEntitled}
 						messagesQueryKey={EmailKeys.gmailMessages}
 						statusQueryKey={EmailKeys.gmailStatus}
@@ -160,11 +188,26 @@ function EmailSettingsPage() {
 						status={msStatus}
 						disconnected={msMessages.disconnected}
 						messages={msMessages.messages.map(fromMicrosoft)}
-						justConnected={search.connected === '1'}
+						justConnected={oauthFeedback.connected === '1'}
 						billingEntitled={billingEntitled}
 						messagesQueryKey={EmailKeys.microsoftMessages}
 						statusQueryKey={EmailKeys.microsoftStatus}
 						useDisconnect={useDisconnectMicrosoft}
+						disconnectNote={
+							<>
+								Use <strong>Disconnect</strong> above to revoke our access — that's what stops Quoteom
+								from reading your mailbox. To also remove Quoteom from your Microsoft account's app
+								list, visit{' '}
+								<MuiLink
+									href='https://account.microsoft.com/privacy/app-access'
+									target='_blank'
+									rel='noopener noreferrer'
+								>
+									account.microsoft.com/privacy
+								</MuiLink>{' '}
+								— this is optional and doesn't disconnect us on its own.
+							</>
+						}
 					/>
 				</Stack>
 
@@ -188,6 +231,11 @@ interface ProviderPanelProps {
 	messagesQueryKey: readonly unknown[];
 	statusQueryKey: readonly unknown[];
 	useDisconnect: () => { mutate: () => void; isPending: boolean };
+	// Optional caption shown under the Disconnect/Reconnect buttons. Used by the Microsoft
+	// panel to nudge users at Entra's user-revoke page since Microsoft offers no
+	// programmatic revoke endpoint — clearing the local row removes our access, but the
+	// grant itself lingers in the user's Microsoft account until they delete it there.
+	disconnectNote?: React.ReactNode;
 }
 
 /**
@@ -205,7 +253,8 @@ function ProviderPanel({
 	billingEntitled,
 	messagesQueryKey,
 	statusQueryKey,
-	useDisconnect
+	useDisconnect,
+	disconnectNote
 }: ProviderPanelProps) {
 	const queryClient = useQueryClient();
 	const disconnect = useDisconnect();
@@ -261,6 +310,12 @@ function ProviderPanel({
 							Reconnect
 						</Button>
 					</Box>
+
+					{disconnectNote && (
+						<Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1.5 }}>
+							{disconnectNote}
+						</Typography>
+					)}
 
 					<Divider sx={{ my: 3 }} />
 					<Typography variant='h2' sx={{ fontSize: 16, mb: 2 }}>
@@ -347,6 +402,59 @@ function MessageRow({ message }: { message: UnifiedMessage }) {
 				}
 			/>
 		</ListItem>
+	);
+}
+
+/**
+ * Surfaced when a user in a work tenant tries to connect Microsoft and Entra rejects the
+ * request because their admin has disabled user-level consent for Mail.* scopes. The user
+ * can't fix this themselves — their IT admin has to approve the app once for the whole
+ * tenant. We provide a copyable link they can forward to that admin.
+ */
+function AdminConsentAlert({ adminConsentUrl }: { adminConsentUrl: string }) {
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = async () => {
+		try {
+			await navigator.clipboard.writeText(adminConsentUrl);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2500);
+		} catch {
+			// Clipboard API can fail in older browsers / non-secure contexts; the link is
+			// visible in the Alert so the user can copy it manually as a fallback.
+			setCopied(false);
+		}
+	};
+
+	return (
+		<Alert severity='warning' sx={{ mb: 3 }}>
+			<Typography variant='body2' sx={{ mb: 1, fontWeight: 600 }}>
+				Your IT admin needs to approve Quoteom for your organization.
+			</Typography>
+			<Typography variant='body2' sx={{ mb: 2 }}>
+				Microsoft requires a one-time admin approval before anyone in your company can connect their mailbox.
+				Forward this link to your IT admin — once they approve, you and your colleagues can connect your Outlook
+				mailboxes normally.
+			</Typography>
+			<Box
+				sx={{
+					p: 1.25,
+					mb: 1.5,
+					bgcolor: 'background.default',
+					border: 1,
+					borderColor: 'divider',
+					borderRadius: 1,
+					wordBreak: 'break-all',
+					fontFamily: 'monospace',
+					fontSize: 12
+				}}
+			>
+				{adminConsentUrl}
+			</Box>
+			<Button size='small' variant='outlined' color='inherit' onClick={handleCopy}>
+				{copied ? 'Copied!' : 'Copy link'}
+			</Button>
+		</Alert>
 	);
 }
 

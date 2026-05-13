@@ -2,9 +2,15 @@ import { MemberWrite } from '@/common/decorators/member-write.decorator';
 import { TenantMemberGuard } from '@/common/guards/tenant-member.guard';
 import type { EnvSchema } from '@/config/env.schema';
 import { EmailProvider } from '@/generated/prisma/enums';
-import { OAUTH_CODE_MISSING, OAUTH_STATE_INVALID } from '@/lib/errors';
+import {
+	MICROSOFT_ADMIN_CONSENT_ERROR_CODE_REGEX,
+	MICROSOFT_ADMIN_CONSENT_REQUIRED,
+	OAUTH_CODE_MISSING,
+	OAUTH_STATE_INVALID
+} from '@/lib/errors';
 import { issueOAuthState, verifyOAuthState } from '@/lib/oauth/signed-state';
 import { EmailAccountsService, type MailboxScope } from '@/modules/email-accounts/email-accounts.service';
+import { MicrosoftOAuthService } from '@/modules/email-accounts/microsoft-oauth.service';
 import { MicrosoftDisconnectResponseDto } from '@/modules/microsoft/dto/microsoft-disconnect.response.dto';
 import {
 	MicrosoftMessageDto,
@@ -12,7 +18,6 @@ import {
 } from '@/modules/microsoft/dto/microsoft-messages.response.dto';
 import { MicrosoftStatusResponseDto } from '@/modules/microsoft/dto/microsoft-status.response.dto';
 import { MicrosoftGraphApiService } from '@/modules/microsoft/microsoft-graph-api.service';
-import { MicrosoftOAuthService } from '@/modules/email-accounts/microsoft-oauth.service';
 import { MICROSOFT_STATE_COOKIE } from '@/modules/microsoft/microsoft.constants';
 import {
 	BadRequestException,
@@ -111,12 +116,30 @@ export class MicrosoftController {
 		@Res() response: Response,
 		@Query('code') code: string | undefined,
 		@Query('state') state: string | undefined,
-		@Query('error') error: string | undefined
+		@Query('error') error: string | undefined,
+		@Query('error_description') errorDescription: string | undefined
 	): Promise<void> {
 		const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
 		response.clearCookie(MICROSOFT_STATE_COOKIE, { path: '/api/email/microsoft/callback' });
 
+		console.log('Microsoft OAuth callback', { code, state, error, errorDescription });
+
 		if (error) {
+			// Admin-consent required: the user is in a work tenant where the admin has
+			// disabled user-level consent for Mail.* scopes. Surface a structured code so
+			// the UI can render the "send your admin this link" CTA instead of the generic
+			// error Alert. Pass the admin-consent URL through so the web layer doesn't
+			// need to know about Entra endpoints.
+			if (errorDescription && MICROSOFT_ADMIN_CONSENT_ERROR_CODE_REGEX.test(errorDescription)) {
+				const adminConsentUrl = this.oauth.buildAdminConsentUrl();
+				const params = new URLSearchParams({
+					error: MICROSOFT_ADMIN_CONSENT_REQUIRED,
+					adminConsentUrl
+				});
+				response.redirect(`${webOrigin}/settings/email?${params.toString()}`);
+				return;
+			}
+
 			response.redirect(`${webOrigin}/settings/email?error=${encodeURIComponent(error)}`);
 			return;
 		}

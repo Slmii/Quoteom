@@ -714,6 +714,17 @@ Setup once: register an app in https://entra.microsoft.com → App Registrations
 - [ ] **Expect** `RawMessage.threadId` is populated from Graph's `conversationId` (used by W5.6 thread reconstruction).
 - [ ] Note: Microsoft mailboxes don't get a `historyId` in `EmailAccount` — Graph push uses a different cursor (W3.6).
 
+### MS-ADMIN-CONSENT-01: Work-tenant admin-consent error surfaces the admin CTA
+The scenario: a user signs in with a work Microsoft account whose tenant admin has disabled user-level consent for `Mail.*` scopes. Entra refuses to issue the auth code and redirects back to our callback with `error=access_denied` + `error_description=AADSTS65001…` (or AADSTS90094 / AADSTS900971). We translate that into a structured `microsoft_admin_consent_required` UI state with a copyable admin-consent link.
+- [ ] Two ways to simulate without an actual locked-down tenant:
+   - **Manual URL**: hit `http://localhost:3001/api/email/microsoft/callback?error=access_denied&error_description=AADSTS90094%3A+The+grant+requires+admin+permission` while signed in with a valid session.
+   - **Real tenant**: if you have access to an org's Entra portal, set Enterprise applications → Consent and permissions → User consent settings to **"Do not allow user consent"**, then try connecting from a member account.
+- [ ] **Expect** browser lands on `/settings/email?error=microsoft_admin_consent_required&adminConsentUrl=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon%2Fadminconsent%3F…`.
+- [ ] **Expect** UI: yellow warning Alert with copy "Your IT admin needs to approve Quoteom for your organization", the admin-consent URL displayed in a monospace box, and a **Copy link** button that flips to "Copied!" for ~2.5 s after click.
+- [ ] **Expect** the URL points at `https://login.microsoftonline.com/common/adminconsent` with `client_id` matching `MICROSOFT_CLIENT_ID` and `redirect_uri` matching the configured callback.
+- [ ] Negative case: `?error=access_denied&error_description=AADSTS70008%3A+expired+token` (unrelated code) should fall through to the existing generic error Alert ("The provider returned an error: access_denied"), NOT render the admin-consent CTA.
+- [ ] Negative case: `?error=access_denied` with NO `error_description` should also fall through to the generic error Alert.
+
 ### MS-06: Per-user isolation — multi-provider parity
 - [ ] Same org. Member A connects Gmail. Member B connects Microsoft. DB shows 2 `EmailAccount` rows (different `userId`, different `provider`).
 - [ ] Member A's `/settings/email` shows Gmail "Connected as A", Microsoft "Not connected".

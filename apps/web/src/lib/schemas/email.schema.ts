@@ -11,5 +11,9 @@ import z from 'zod';
  */
 export const EmailSettingsSearchSchema = z.object({
 	connected: z.coerce.string().optional(),
-	error: z.coerce.string().optional()
+	error: z.coerce.string().optional(),
+	// Populated when the Microsoft callback detects an admin-consent-required error
+	// (Entra AADSTS65001 / 90094 / 900971). The web layer renders the link as-is —
+	// the URL is built server-side so we don't need MICROSOFT_CLIENT_ID in the browser bundle.
+	adminConsentUrl: z.coerce.string().url().optional()
 });
