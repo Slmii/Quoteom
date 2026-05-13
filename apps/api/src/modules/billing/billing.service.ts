@@ -13,8 +13,9 @@ import {
 	SEAT_SYNC_STATUSES
 } from '@/modules/billing/billing.constants';
 import type { BillingState, BillingStatusResponseDto } from '@/modules/billing/dto/billing-status.response.dto';
+import { LogService } from '@/modules/logger/log.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { ConflictException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 
@@ -47,12 +48,12 @@ const TRACKED_EVENTS: ReadonlyArray<string> = [
 
 @Injectable()
 export class BillingService {
-	private readonly logger = new Logger(BillingService.name);
 	private readonly stripe: InstanceType<typeof Stripe>;
 
 	constructor(
 		private readonly prisma: PrismaService,
-		private readonly config: ConfigService<EnvSchema, true>
+		private readonly config: ConfigService<EnvSchema, true>,
+		private readonly logService: LogService
 	) {
 		const secretKey = this.config.get('STRIPE_SECRET_KEY', { infer: true });
 		if (!secretKey) {
@@ -86,18 +87,15 @@ export class BillingService {
 		if (existing) {
 			// Verify the customer still exists in the current Stripe account. If it was
 			// deleted out from under us (account swap, test data wiped), fall through to
-			// re-create instead of failing every checkout attempt forever.
+			// re-create instead of failing every checkout attempt forever. The recreate
+			// itself emits `billing.customer.regenerated` below — we don't double-log here.
 			try {
 				const customer = await this.stripe.customers.retrieve(existing.stripeCustomerId);
 				if (!customer.deleted) {
 					return existing.stripeCustomerId;
 				}
-
-				this.logger.warn(`Stripe customer ${existing.stripeCustomerId} was deleted upstream — recreating`);
 			} catch (error) {
-				if (isResourceMissingError(error)) {
-					this.logger.warn(`Stripe customer ${existing.stripeCustomerId} no longer exists — recreating`);
-				} else {
+				if (!isResourceMissingError(error)) {
 					throw error;
 				}
 			}
@@ -133,7 +131,18 @@ export class BillingService {
 			}
 		});
 
-		this.logger.log(`Created Stripe customer ${customer.id} for org ${organizationId}`);
+		this.logService.logAction({
+			action: existing ? 'billing.customer.regenerated' : 'billing.customer.created',
+			message: existing
+				? `Recreated Stripe customer for org ${organizationId} (old: ${existing.stripeCustomerId}, new: ${customer.id})`
+				: `Created Stripe customer ${customer.id} for org ${organizationId}`,
+			metadata: {
+				organizationId,
+				newCustomerId: customer.id,
+				...(existing ? { previousCustomerId: existing.stripeCustomerId, reason: 'resource_missing' } : {})
+			},
+			context: 'BillingService'
+		});
 		return customer.id;
 	}
 
@@ -158,6 +167,13 @@ export class BillingService {
 		});
 
 		if (existing?.status && LIVE_SUBSCRIPTION_STATUSES.includes(existing.status)) {
+			this.logService.logAction({
+				action: 'billing.checkout.rejected',
+				message: `Checkout rejected — org ${organizationId} already has a ${existing.status} subscription`,
+				metadata: { organizationId, currentStatus: existing.status, reason: 'one_live_sub_guard' },
+				level: 'warn',
+				context: 'BillingService'
+			});
 			throw new ConflictException(subscriptionAlreadyActive(existing.status));
 		}
 
@@ -196,6 +212,13 @@ export class BillingService {
 		if (!session.url) {
 			throw new InternalServerErrorException(STRIPE_CHECKOUT_URL_MISSING);
 		}
+
+		this.logService.logAction({
+			action: 'billing.checkout.created',
+			message: `Checkout session ${session.id} created for org ${organizationId}`,
+			metadata: { organizationId, sessionId: session.id, seatCount, priceId },
+			context: 'BillingService'
+		});
 
 		return { url: session.url };
 	}
@@ -239,6 +262,16 @@ export class BillingService {
 			expand: ['data.default_payment_method', 'data.items']
 		});
 
+		// Capture the previous status BEFORE we overwrite it so we can log the transition.
+		// `findUnique` is cheap (indexed on stripeCustomerId) and the row always exists by
+		// the time this runs — getOrCreateCustomer upserts it during Checkout.
+		const before = await this.prisma.subscription.findUnique({
+			where: { stripeCustomerId: customerId },
+			select: { status: true, organizationId: true }
+		});
+		const previousStatus = before?.status ?? null;
+		const organizationId = before?.organizationId ?? null;
+
 		if (subscriptions.data.length === 0) {
 			await this.prisma.subscription.update({
 				where: { stripeCustomerId: customerId },
@@ -253,7 +286,12 @@ export class BillingService {
 					paymentMethodLast4: null
 				}
 			});
-			this.logger.log(`Customer ${customerId} has no subscription — cleared local state`);
+			this.logService.logAction({
+				action: 'billing.subscription.synced',
+				message: `Cleared subscription state for customer ${customerId} (${previousStatus ?? 'none'} → none)`,
+				metadata: { organizationId, customerId, previousStatus, newStatus: null },
+				context: 'BillingService'
+			});
 			return { status: null };
 		}
 
@@ -277,7 +315,21 @@ export class BillingService {
 			}
 		});
 
-		this.logger.log(`Synced subscription ${sub.id} (${sub.status}) for customer ${customerId}`);
+		this.logService.logAction({
+			action: 'billing.subscription.synced',
+			message: `Synced subscription ${sub.id} for customer ${customerId} (${previousStatus ?? 'none'} → ${sub.status})`,
+			metadata: {
+				organizationId,
+				customerId,
+				subscriptionId: sub.id,
+				previousStatus,
+				newStatus: sub.status,
+				cancelAtPeriodEnd: sub.cancel_at_period_end,
+				seatCount: item?.quantity ?? null,
+				currentPeriodEnd: item?.current_period_end ? new Date(item.current_period_end * 1000).toISOString() : null
+			},
+			context: 'BillingService'
+		});
 		return { status: sub.status };
 	}
 
@@ -355,7 +407,13 @@ export class BillingService {
 
 			const item = remote.items.data[0];
 			if (!item) {
-				this.logger.warn(`Subscription ${sub.stripeSubscriptionId} has no items — cannot sync seats`);
+				this.logService.logAction({
+					action: 'billing.seats.sync.no_items',
+					message: `Subscription ${sub.stripeSubscriptionId} has no items — cannot sync seats`,
+					metadata: { organizationId, subscriptionId: sub.stripeSubscriptionId },
+					level: 'warn',
+					context: 'BillingService'
+				});
 				return;
 			}
 
@@ -368,13 +426,27 @@ export class BillingService {
 				proration_behavior: 'create_prorations'
 			});
 
-			this.logger.log(
-				`Seat sync for org ${organizationId}: ${item.quantity ?? '?'} → ${desiredQuantity} on ${sub.stripeSubscriptionId}`
-			);
+			this.logService.logAction({
+				action: 'billing.seats.synced',
+				message: `Seat count updated for org ${organizationId} (${item.quantity ?? '?'} → ${desiredQuantity})`,
+				metadata: {
+					organizationId,
+					subscriptionId: sub.stripeSubscriptionId,
+					from: item.quantity ?? null,
+					to: desiredQuantity,
+					prorationBehavior: 'create_prorations'
+				},
+				context: 'BillingService'
+			});
 		} catch (error) {
-			this.logger.error(
-				`Seat sync failed for org ${organizationId}: ${error instanceof Error ? error.message : 'unknown'}`
-			);
+			this.logService.logAction({
+				action: 'billing.seats.sync_failed',
+				message: `Seat sync failed for org ${organizationId}: ${error instanceof Error ? error.message : 'unknown'}`,
+				metadata: { organizationId, subscriptionId: sub.stripeSubscriptionId },
+				level: 'error',
+				stack: error instanceof Error ? error.stack : undefined,
+				context: 'BillingService'
+			});
 		}
 	}
 
@@ -401,7 +473,13 @@ export class BillingService {
 		const customerId = object.customer;
 
 		if (typeof customerId !== 'string') {
-			this.logger.warn(`Event ${event.type} has no customer id — skipping`);
+			this.logService.logAction({
+				action: 'billing.webhook.skipped_no_customer',
+				message: `Event ${event.type} has no customer id — skipping`,
+				metadata: { eventType: event.type, eventId: event.id },
+				level: 'warn',
+				context: 'BillingService'
+			});
 			return;
 		}
 

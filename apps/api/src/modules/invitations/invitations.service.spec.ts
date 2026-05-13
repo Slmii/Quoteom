@@ -34,6 +34,11 @@ async function callAssertSeatBudget(service: InvitationsService, organizationId:
 describe('InvitationsService.assertSeatBudget', () => {
 	let prisma: FakePrisma;
 	const config = {} as unknown as ConstructorParameters<typeof InvitationsService>[1];
+	// LogService stub — assertSeatBudget logs a warn-level action on cap-hit, which the
+	// happy-path tests don't assert on; a no-op stub keeps the test surface unchanged.
+	const logServiceStub = { logAction: () => undefined } as unknown as ConstructorParameters<
+		typeof InvitationsService
+	>[3];
 
 	beforeEach(() => {
 		prisma = makePrisma(0, 0);
@@ -44,7 +49,7 @@ describe('InvitationsService.assertSeatBudget', () => {
 			'%s skips the seat check entirely (no Prisma calls)',
 			async state => {
 				const billing = makeBilling(state);
-				const service = new InvitationsService(prisma as unknown as PrismaService, config, billing);
+				const service = new InvitationsService(prisma as unknown as PrismaService, config, billing, logServiceStub);
 
 				await expect(callAssertSeatBudget(service, 'org-1')).resolves.toBeUndefined();
 				expect(prisma.membership.count).not.toHaveBeenCalled();
@@ -54,7 +59,7 @@ describe('InvitationsService.assertSeatBudget', () => {
 
 		it('state="none" (pre-Checkout) bypasses this cap — EntitlementGuard blocks earlier', async () => {
 			const billing = makeBilling('none');
-			const service = new InvitationsService(prisma as unknown as PrismaService, config, billing);
+			const service = new InvitationsService(prisma as unknown as PrismaService, config, billing, logServiceStub);
 
 			await expect(callAssertSeatBudget(service, 'org-1')).resolves.toBeUndefined();
 			expect(prisma.membership.count).not.toHaveBeenCalled();
@@ -65,7 +70,7 @@ describe('InvitationsService.assertSeatBudget', () => {
 		it('allows the invitation when active + pending < SEATS_INCLUDED', async () => {
 			const billing = makeBilling('trialing');
 			const p = makePrisma(1, 1); // 1 + 1 = 2 < 3
-			const service = new InvitationsService(p as unknown as PrismaService, config, billing);
+			const service = new InvitationsService(p as unknown as PrismaService, config, billing, logServiceStub);
 
 			await expect(callAssertSeatBudget(service, 'org-1')).resolves.toBeUndefined();
 		});
@@ -73,7 +78,7 @@ describe('InvitationsService.assertSeatBudget', () => {
 		it('rejects with 402 trial_seat_limit when active + pending == SEATS_INCLUDED', async () => {
 			const billing = makeBilling('trialing');
 			const p = makePrisma(1, 2); // 1 + 2 = 3 == cap
-			const service = new InvitationsService(p as unknown as PrismaService, config, billing);
+			const service = new InvitationsService(p as unknown as PrismaService, config, billing, logServiceStub);
 
 			expect.assertions(5);
 			try {
@@ -91,7 +96,7 @@ describe('InvitationsService.assertSeatBudget', () => {
 		it('rejects when active alone is already at the cap, even with 0 pending', async () => {
 			const billing = makeBilling('trialing');
 			const p = makePrisma(SEATS_INCLUDED, 0);
-			const service = new InvitationsService(p as unknown as PrismaService, config, billing);
+			const service = new InvitationsService(p as unknown as PrismaService, config, billing, logServiceStub);
 
 			await expect(callAssertSeatBudget(service, 'org-1')).rejects.toBeInstanceOf(HttpException);
 		});
@@ -100,7 +105,7 @@ describe('InvitationsService.assertSeatBudget', () => {
 			// The Prisma query shape is the contract — verify it matches the docstring.
 			const billing = makeBilling('trialing');
 			const p = makePrisma(1, 0);
-			const service = new InvitationsService(p as unknown as PrismaService, config, billing);
+			const service = new InvitationsService(p as unknown as PrismaService, config, billing, logServiceStub);
 
 			await callAssertSeatBudget(service, 'org-1');
 
@@ -116,6 +121,29 @@ describe('InvitationsService.assertSeatBudget', () => {
 			expect(invocation.where.expiresAt.gt).toBeInstanceOf(Date);
 			// Cutoff is "now-ish" — within 5 seconds is plenty of slack for test execution.
 			expect(Math.abs(invocation.where.expiresAt.gt.getTime() - Date.now())).toBeLessThan(5_000);
+		});
+
+		it('emits invitation.rejected.trial_seat_cap at warn level when the cap fires', async () => {
+			const billing = makeBilling('trialing');
+			const p = makePrisma(SEATS_INCLUDED, 0);
+			const logAction = jest.fn();
+			const recordingLog = { logAction } as unknown as ConstructorParameters<typeof InvitationsService>[3];
+			const service = new InvitationsService(p as unknown as PrismaService, config, billing, recordingLog);
+
+			await expect(callAssertSeatBudget(service, 'org-1')).rejects.toBeInstanceOf(HttpException);
+			expect(logAction).toHaveBeenCalledTimes(1);
+			expect(logAction).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: 'invitation.rejected.trial_seat_cap',
+					level: 'warn',
+					metadata: expect.objectContaining({
+						organizationId: 'org-1',
+						cap: SEATS_INCLUDED,
+						memberCount: SEATS_INCLUDED,
+						pendingInvites: 0
+					})
+				})
+			);
 		});
 	});
 });

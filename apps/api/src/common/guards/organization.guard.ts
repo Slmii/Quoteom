@@ -1,5 +1,6 @@
 import { AuthGuard } from '@/common/guards/auth.guard';
 import { NO_ACTIVE_ORGANIZATION } from '@/lib/errors';
+import { logContext } from '@/modules/logger/log-context';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
@@ -40,6 +41,12 @@ export class OrganizationGuard extends AuthGuard {
 		}
 
 		request.organizationId = user.currentOrganizationId;
+
+		// Same intent as AuthGuard's userId push — once we resolve the active org we attach
+		// it to the log context so persisted log rows include it. No-op outside a request
+		// boundary (e.g. tests that bypass the middleware).
+		logContext.set({ organizationId: user.currentOrganizationId });
+
 		return true;
 	}
 }

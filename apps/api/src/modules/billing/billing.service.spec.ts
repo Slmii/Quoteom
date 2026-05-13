@@ -62,9 +62,13 @@ function makeConfig(): { get(key: string): string | undefined } {
  * methods we exercise.
  */
 function buildService(prisma: FakePrisma, stripeFake: Record<string, unknown>): BillingService {
+	// LogService is used for logAction calls only — tests don't assert on them, so a stub
+	// with a no-op method is sufficient. Action logging is exercised by its own spec.
+	const logService = { logAction: () => undefined } as unknown as ConstructorParameters<typeof BillingService>[2];
 	const service = new BillingService(
 		prisma as unknown as PrismaService,
-		makeConfig() as unknown as ConstructorParameters<typeof BillingService>[1]
+		makeConfig() as unknown as ConstructorParameters<typeof BillingService>[1],
+		logService
 	);
 	(service as unknown as { stripe: unknown }).stripe = stripeFake;
 	return service;

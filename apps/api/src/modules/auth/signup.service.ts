@@ -1,5 +1,6 @@
 import { MembershipRole } from '@/generated/prisma/client';
 import { ACCOUNT_ALREADY_EXISTS } from '@/lib/errors';
+import { LogService } from '@/modules/logger/log.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ConflictException, Injectable } from '@nestjs/common';
 
@@ -23,7 +24,10 @@ interface SignupResult {
  */
 @Injectable()
 export class SignupService {
-	constructor(private readonly prisma: PrismaService) {}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly logService: LogService
+	) {}
 
 	async signup(rawEmail: string, rawCompanyName: string): Promise<SignupResult> {
 		const email = rawEmail.trim().toLowerCase();
@@ -37,6 +41,13 @@ export class SignupService {
 			select: { id: true }
 		});
 		if (existing) {
+			this.logService.logAction({
+				action: 'signup.rejected.duplicate_email',
+				message: `Signup rejected — account already exists for ${email}`,
+				metadata: { email },
+				level: 'warn',
+				context: 'SignupService'
+			});
 			throw new ConflictException(ACCOUNT_ALREADY_EXISTS);
 		}
 
@@ -61,6 +72,18 @@ export class SignupService {
 			});
 
 			return { userId: user.id, organizationId: organization.id, email };
+		});
+
+		this.logService.logAction({
+			action: 'signup.org_created',
+			message: `New org created: "${companyName}" by ${email}`,
+			metadata: {
+				userId: result.userId,
+				organizationId: result.organizationId,
+				email: result.email,
+				companyName
+			},
+			context: 'SignupService'
 		});
 
 		return result;

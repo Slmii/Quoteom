@@ -4,6 +4,7 @@ import '@/load-env';
 
 import { AppModule } from '@/app.module';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
+import { requestContextMiddleware } from '@/common/middleware/request-context.middleware';
 import type { EnvSchema } from '@/config/env.schema';
 import { authConfig } from '@/modules/auth/auth.config';
 import { inngestFunctions } from '@/modules/inngest/functions';
@@ -54,6 +55,13 @@ async function bootstrap() {
 		credentials: true
 	});
 	app.setGlobalPrefix('api');
+
+	// Request-scoped log context (AsyncLocalStorage). Mounted FIRST so every downstream
+	// handler — Auth.js, Inngest, Nest controllers — runs inside an ALS frame and any log
+	// emitted during the request inherits a stable `requestId`. AuthGuard / OrganizationGuard
+	// push `userId` / `organizationId` into the same store once auth resolves. The LogService
+	// reads it on every persist call so the `Log` table rows are correlatable end-to-end.
+	app.use(requestContextMiddleware);
 
 	// Auth.js — mounted as Express middleware on /api/auth/*.
 	// Sits before global pipes/filters because it handles its own request/response lifecycle.

@@ -11,6 +11,7 @@ import {
 import { issueOAuthState, verifyOAuthState } from '@/lib/oauth/signed-state';
 import { EmailAccountsService, type MailboxScope } from '@/modules/email-accounts/email-accounts.service';
 import { MicrosoftOAuthService } from '@/modules/email-accounts/microsoft-oauth.service';
+import { LogService } from '@/modules/logger/log.service';
 import { MicrosoftDisconnectResponseDto } from '@/modules/microsoft/dto/microsoft-disconnect.response.dto';
 import {
 	MicrosoftMessageDto,
@@ -82,7 +83,8 @@ export class MicrosoftController {
 		private readonly oauth: MicrosoftOAuthService,
 		private readonly api: MicrosoftGraphApiService,
 		private readonly accounts: EmailAccountsService,
-		private readonly config: ConfigService<EnvSchema, true>
+		private readonly config: ConfigService<EnvSchema, true>,
+		private readonly logService: LogService
 	) {}
 
 	@ApiOperation({ summary: 'Start the Microsoft OAuth handshake (redirects to Entra).' })
@@ -122,8 +124,6 @@ export class MicrosoftController {
 		const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
 		response.clearCookie(MICROSOFT_STATE_COOKIE, { path: '/api/email/microsoft/callback' });
 
-		console.log('Microsoft OAuth callback', { code, state, error, errorDescription });
-
 		if (error) {
 			// Admin-consent required: the user is in a work tenant where the admin has
 			// disabled user-level consent for Mail.* scopes. Surface a structured code so
@@ -136,10 +136,34 @@ export class MicrosoftController {
 					error: MICROSOFT_ADMIN_CONSENT_REQUIRED,
 					adminConsentUrl
 				});
+				this.logService.logAction({
+					action: 'oauth.microsoft.admin_consent_required',
+					message: 'Microsoft callback returned an admin-consent-required error code',
+					metadata: {
+						errorCode: error,
+						// Truncated — error_description from Entra can be 500+ chars; the
+						// first 200 keep the AADSTSxxxxx prefix + the useful prose without
+						// flooding the Log table.
+						errorDescription: errorDescription.slice(0, 200),
+						adminConsentUrlGenerated: true
+					},
+					level: 'warn',
+					context: 'MicrosoftController'
+				});
 				response.redirect(`${webOrigin}/settings/email?${params.toString()}`);
 				return;
 			}
 
+			this.logService.logAction({
+				action: 'oauth.microsoft.error',
+				message: `Microsoft callback returned an OAuth error: ${error}`,
+				metadata: {
+					errorCode: error,
+					errorDescription: errorDescription ? errorDescription.slice(0, 200) : null
+				},
+				level: 'warn',
+				context: 'MicrosoftController'
+			});
 			response.redirect(`${webOrigin}/settings/email?error=${encodeURIComponent(error)}`);
 			return;
 		}

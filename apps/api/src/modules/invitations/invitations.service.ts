@@ -16,6 +16,7 @@ import { SEATS_INCLUDED, TRIAL_SEAT_LIMIT_CODE, TRIAL_STATES } from '@/modules/b
 import { BillingService } from '@/modules/billing/billing.service';
 import { AcceptInvitationResponseDto } from '@/modules/invitations/dto/accept-invitation.response.dto';
 import { InvitationResponseDto } from '@/modules/invitations/dto/invitation.response.dto';
+import { LogService } from '@/modules/logger/log.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
 	BadRequestException,
@@ -43,7 +44,8 @@ export class InvitationsService {
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly config: ConfigService<EnvSchema, true>,
-		private readonly billing: BillingService
+		private readonly billing: BillingService,
+		private readonly logService: LogService
 	) {}
 
 	async create(input: CreateInvitationInput): Promise<InvitationResponseDto> {
@@ -99,6 +101,18 @@ export class InvitationsService {
 			devFallbackLog: `Invite for ${email} to ${organization.name}:\n  ${url}`
 		});
 
+		this.logService.logAction({
+			action: 'invitation.created',
+			message: `Invitation sent to ${email} for ${organization.name}`,
+			metadata: {
+				organizationId: input.organizationId,
+				invitationId: invitation.id,
+				inviteeEmail: email,
+				role: invitation.role
+			},
+			context: 'InvitationsService'
+		});
+
 		return {
 			id: invitation.id,
 			email: invitation.email,
@@ -140,6 +154,12 @@ export class InvitationsService {
 			throw new ConflictException(INVITATION_ALREADY_ACCEPTED);
 		}
 		await this.prisma.invitation.delete({ where: { id: invitationId } });
+		this.logService.logAction({
+			action: 'invitation.revoked',
+			message: `Invitation for ${invitation.email} revoked`,
+			metadata: { organizationId, invitationId: invitation.id, inviteeEmail: invitation.email },
+			context: 'InvitationsService'
+		});
 	}
 
 	async accept(token: string): Promise<AcceptInvitationResponseDto> {
@@ -221,6 +241,19 @@ export class InvitationsService {
 		// A subsequent sync (next invite, or a webhook-driven re-sync) will fix the drift.
 		await this.billing.syncSeatCount(result.organizationId);
 
+		this.logService.logAction({
+			action: 'invitation.accepted',
+			message: `${result.email} joined ${result.organizationName}`,
+			metadata: {
+				organizationId: result.organizationId,
+				invitationId: invitation.id,
+				userId: result.userId,
+				inviteeEmail: result.email,
+				role: invitation.role
+			},
+			context: 'InvitationsService'
+		});
+
 		return result;
 	}
 
@@ -289,6 +322,19 @@ export class InvitationsService {
 		if (memberCount + pendingInvites < SEATS_INCLUDED) {
 			return;
 		}
+
+		this.logService.logAction({
+			action: 'invitation.rejected.trial_seat_cap',
+			message: `Trial seat cap reached for org ${organizationId} (${memberCount} members + ${pendingInvites} pending)`,
+			metadata: {
+				organizationId,
+				cap: SEATS_INCLUDED,
+				memberCount,
+				pendingInvites
+			},
+			level: 'warn',
+			context: 'InvitationsService'
+		});
 
 		throw new HttpException(
 			{

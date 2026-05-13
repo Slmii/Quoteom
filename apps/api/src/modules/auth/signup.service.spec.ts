@@ -35,6 +35,10 @@ function makePrisma(opts: {
 	return { prisma, tx };
 }
 
+// LogService stub — signup logs `signup.org_created` / `signup.rejected.duplicate_email`,
+// which these tests don't assert on; a no-op stub keeps the existing assertion surface.
+const logServiceStub = { logAction: () => undefined } as unknown as ConstructorParameters<typeof SignupService>[1];
+
 describe('SignupService', () => {
 	let service: SignupService;
 	let prisma: FakePrisma;
@@ -44,7 +48,7 @@ describe('SignupService', () => {
 		const built = makePrisma({});
 		prisma = built.prisma;
 		tx = built.tx;
-		service = new SignupService(prisma as unknown as PrismaService);
+		service = new SignupService(prisma as unknown as PrismaService, logServiceStub);
 	});
 
 	describe('happy path', () => {
@@ -92,7 +96,7 @@ describe('SignupService', () => {
 	describe('duplicate email', () => {
 		it('throws ConflictException without entering the transaction', async () => {
 			const built = makePrisma({ existingUser: { id: 'existing-1' } });
-			const dupService = new SignupService(built.prisma as unknown as PrismaService);
+			const dupService = new SignupService(built.prisma as unknown as PrismaService, logServiceStub);
 
 			await expect(dupService.signup('taken@quoteom.dev', 'New Co')).rejects.toBeInstanceOf(ConflictException);
 			expect(built.prisma.$transaction).not.toHaveBeenCalled();
@@ -100,14 +104,14 @@ describe('SignupService', () => {
 
 		it('uses the original error message from `ACCOUNT_ALREADY_EXISTS`', async () => {
 			const built = makePrisma({ existingUser: { id: 'existing-1' } });
-			const dupService = new SignupService(built.prisma as unknown as PrismaService);
+			const dupService = new SignupService(built.prisma as unknown as PrismaService, logServiceStub);
 
 			await expect(dupService.signup('taken@quoteom.dev', 'New Co')).rejects.toThrow(ACCOUNT_ALREADY_EXISTS);
 		});
 
 		it('case-insensitively detects an existing user (uppercased input still rejected)', async () => {
 			const built = makePrisma({ existingUser: { id: 'existing-1' } });
-			const dupService = new SignupService(built.prisma as unknown as PrismaService);
+			const dupService = new SignupService(built.prisma as unknown as PrismaService, logServiceStub);
 
 			await expect(dupService.signup('TAKEN@quoteom.dev', 'New Co')).rejects.toBeInstanceOf(ConflictException);
 			// findUnique was called with the lowercased form — proves we did not skip normalization.
@@ -115,6 +119,49 @@ describe('SignupService', () => {
 				where: { email: 'taken@quoteom.dev' },
 				select: { id: true }
 			});
+		});
+	});
+
+	describe('action logging', () => {
+		it('emits signup.org_created on success', async () => {
+			const built = makePrisma({});
+			const logAction = jest.fn();
+			const recordingLog = { logAction } as unknown as ConstructorParameters<typeof SignupService>[1];
+			const recordingService = new SignupService(built.prisma as unknown as PrismaService, recordingLog);
+
+			await recordingService.signup('founder@quoteom.dev', 'Quoteom BV');
+
+			expect(logAction).toHaveBeenCalledTimes(1);
+			expect(logAction).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: 'signup.org_created',
+					metadata: expect.objectContaining({
+						email: 'founder@quoteom.dev',
+						companyName: 'Quoteom BV',
+						userId: 'user-1',
+						organizationId: 'org-1'
+					})
+				})
+			);
+		});
+
+		it('emits signup.rejected.duplicate_email at warn level on duplicate', async () => {
+			const built = makePrisma({ existingUser: { id: 'existing-1' } });
+			const logAction = jest.fn();
+			const recordingLog = { logAction } as unknown as ConstructorParameters<typeof SignupService>[1];
+			const recordingService = new SignupService(built.prisma as unknown as PrismaService, recordingLog);
+
+			await expect(recordingService.signup('taken@quoteom.dev', 'New Co')).rejects.toBeInstanceOf(
+				ConflictException
+			);
+			expect(logAction).toHaveBeenCalledTimes(1);
+			expect(logAction).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: 'signup.rejected.duplicate_email',
+					level: 'warn',
+					metadata: { email: 'taken@quoteom.dev' }
+				})
+			);
 		});
 	});
 });

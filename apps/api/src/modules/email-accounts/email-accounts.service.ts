@@ -6,8 +6,9 @@ import { GoogleOAuthService, type TokenSet as GoogleTokenSet } from '@/modules/e
 import { inngest } from '@/modules/inngest/inngest.client';
 import { InngestEvents } from '@/modules/inngest/inngest.constants';
 import { MicrosoftOAuthService, type TokenSet as MicrosoftTokenSet } from '@/modules/email-accounts/microsoft-oauth.service';
+import { LogService } from '@/modules/logger/log.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 /**
  * Refresh tokens that are within this window of expiring are refreshed proactively
@@ -47,12 +48,11 @@ export interface MailboxScope {
  */
 @Injectable()
 export class EmailAccountsService {
-	private readonly logger = new Logger(EmailAccountsService.name);
-
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly google: GoogleOAuthService,
-		private readonly microsoft: MicrosoftOAuthService
+		private readonly microsoft: MicrosoftOAuthService,
+		private readonly logService: LogService
 	) {}
 
 	private oauthFor(provider: EmailProvider): GoogleOAuthService | MicrosoftOAuthService {
@@ -76,9 +76,14 @@ export class EmailAccountsService {
 		try {
 			await inngest.send({ name, data: { emailAccountId } });
 		} catch (error) {
-			this.logger.error(
-				`Failed to enqueue backfill for ${emailAccountId}: ${error instanceof Error ? error.message : 'unknown'}`
-			);
+			this.logService.logAction({
+				action: 'inngest.event.enqueue_failed',
+				message: `Failed to enqueue backfill for ${emailAccountId}: ${error instanceof Error ? error.message : 'unknown'}`,
+				metadata: { provider, emailAccountId, eventName: name },
+				level: 'error',
+				stack: error instanceof Error ? error.stack : undefined,
+				context: 'EmailAccountsService'
+			});
 		}
 	}
 
@@ -140,9 +145,17 @@ export class EmailAccountsService {
 			select: { id: true }
 		});
 
-		this.logger.log(
-			`${input.provider} ${input.email} connected to org ${input.organizationId} by user ${input.userId}`
-		);
+		this.logService.logAction({
+			action: 'email.connect',
+			message: `${input.provider} mailbox connected: ${input.email}`,
+			metadata: {
+				provider: input.provider,
+				emailAccountId: row.id,
+				email: input.email,
+				scope: input.tokens.scope
+			},
+			context: 'EmailAccountsService'
+		});
 
 		await this.emitConnectedEvent(input.provider, row.id);
 
@@ -237,15 +250,24 @@ export class EmailAccountsService {
 			refreshed = await this.oauthFor(scope.provider).refreshAccessToken(refreshToken);
 		} catch (error) {
 			if (error instanceof OAuthRefreshTokenInvalidException) {
-				this.logger.warn(
-					`${scope.provider} ${row.email} refresh token rejected — deleting row for org ${scope.organizationId} / user ${scope.userId}`
-				);
 				// `deleteMany` (not `delete`) so concurrent self-heal attempts don't collide:
 				// status + messages queries fire in parallel from the same page load and both
 				// can independently detect the stale token, both refresh, both hit
 				// `invalid_grant`, and both race to delete the same row. `delete` throws P2025
 				// for the loser; `deleteMany` is silent on zero rows.
 				await this.prisma.emailAccount.deleteMany({ where: { id: row.id } });
+				this.logService.logAction({
+					action: 'email.disconnect.self_heal',
+					message: `${scope.provider} ${row.email} self-healed — refresh token rejected upstream`,
+					metadata: {
+						provider: scope.provider,
+						emailAccountId: row.id,
+						email: row.email,
+						trigger: 'invalid_grant'
+					},
+					level: 'warn',
+					context: 'EmailAccountsService'
+				});
 				throw new NotFoundException(EMAIL_ACCOUNT_NOT_FOUND);
 			}
 			throw error;
@@ -287,9 +309,13 @@ export class EmailAccountsService {
 				throw error;
 			}
 
-			this.logger.warn(
-				`${scope.provider} returned 401 for org ${scope.organizationId} / user ${scope.userId} — forcing refresh + retry`
-			);
+			this.logService.logAction({
+				action: 'email.token.refresh_after_401',
+				message: `${scope.provider} returned 401 for org ${scope.organizationId} — forcing refresh + retry`,
+				metadata: { provider: scope.provider },
+				level: 'warn',
+				context: 'EmailAccountsService'
+			});
 			const refreshed = await this.getAccessToken(scope, { forceRefresh: true });
 			return await fn(refreshed);
 		}
@@ -321,8 +347,11 @@ export class EmailAccountsService {
 		// requests (or a self-heal racing a user-initiated disconnect) would each find the
 		// row and both try to delete — `delete` throws P2025 for the loser.
 		await this.prisma.emailAccount.deleteMany({ where: { id: row.id } });
-		this.logger.log(
-			`${scope.provider} ${row.email} disconnected from org ${scope.organizationId} by user ${scope.userId}`
-		);
+		this.logService.logAction({
+			action: 'email.disconnect',
+			message: `${scope.provider} mailbox disconnected: ${row.email}`,
+			metadata: { provider: scope.provider, emailAccountId: row.id, email: row.email },
+			context: 'EmailAccountsService'
+		});
 	}
 }

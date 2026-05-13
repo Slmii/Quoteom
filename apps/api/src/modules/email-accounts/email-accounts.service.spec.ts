@@ -26,6 +26,7 @@ function makeService(provider: EmailProvider): {
 	service: EmailAccountsService;
 	deleteManyCalls: jest.Mock;
 	refreshCalls: jest.Mock;
+	logActionCalls: jest.Mock;
 } {
 	const row = {
 		id: 'ea-1',
@@ -61,10 +62,17 @@ function makeService(provider: EmailProvider): {
 		provider === EmailProvider.MICROSOFT ? { refreshAccessToken: refreshCalls } : {}
 	) as unknown as MicrosoftOAuthService;
 
+	// LogService captures `logAction` calls so tests can assert on the self-heal action log.
+	const logActionCalls = jest.fn();
+	const logService = { logAction: logActionCalls } as unknown as ConstructorParameters<
+		typeof EmailAccountsService
+	>[3];
+
 	return {
-		service: new EmailAccountsService(prisma, google, microsoft),
+		service: new EmailAccountsService(prisma, google, microsoft, logService),
 		deleteManyCalls,
-		refreshCalls
+		refreshCalls,
+		logActionCalls
 	};
 }
 
@@ -125,6 +133,25 @@ describe('EmailAccountsService — parallel self-heal race', () => {
 			expect(refreshCalls).toHaveBeenCalledTimes(2);
 			expect(deleteManyCalls).toHaveBeenCalledTimes(2);
 			expect(deleteManyCalls).toHaveBeenCalledWith({ where: { id: 'ea-1' } });
+		});
+
+		it('emits email.disconnect.self_heal at warn level when the row is deleted', async () => {
+			const { service, logActionCalls } = makeService(provider);
+
+			await Promise.allSettled([service.getAccessToken(scope)]);
+
+			expect(logActionCalls).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: 'email.disconnect.self_heal',
+					level: 'warn',
+					metadata: expect.objectContaining({
+						provider,
+						emailAccountId: 'ea-1',
+						email: 'alice@quoteom.dev',
+						trigger: 'invalid_grant'
+					})
+				})
+			);
 		});
 	});
 });
