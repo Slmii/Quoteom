@@ -1,11 +1,15 @@
 import { serverFetch } from '@/lib/api/server-fetch';
 import { createServerFn } from '@tanstack/react-start';
 
-export interface GmailStatus {
+/** Shared shape — status looks the same for every provider. */
+export interface MailboxStatus {
 	connected: boolean;
 	email: string | null;
 	connectedAt: string | null;
 }
+
+export type GmailStatus = MailboxStatus;
+export type MicrosoftStatus = MailboxStatus;
 
 export interface GmailMessage {
 	id: string;
@@ -16,14 +20,29 @@ export interface GmailMessage {
 	from: string | null;
 }
 
+export interface MicrosoftMessage {
+	id: string;
+	conversationId: string;
+	receivedDateTime: string;
+	bodyPreview: string;
+	subject: string | null;
+	fromEmail: string | null;
+	fromName: string | null;
+}
+
 export interface GmailMessages {
 	messages: GmailMessage[];
 	/**
 	 * `true` when the server returned 404 — i.e. the EmailAccount row was self-healed
-	 * away (revoked at Google) at the moment of this fetch. The status query may still
+	 * away (revoked upstream) at the moment of this fetch. The status query may still
 	 * report `connected: true` because it runs in parallel and was answered before the
 	 * deletion. Page should trust this signal AND invalidate the status query.
 	 */
+	disconnected: boolean;
+}
+
+export interface MicrosoftMessages {
+	messages: MicrosoftMessage[];
 	disconnected: boolean;
 }
 
@@ -52,3 +71,27 @@ export const getGmailMessagesServer = createServerFn({ method: 'GET' }).handler(
 	const data = (await response.json()) as { messages: GmailMessage[] };
 	return { messages: data.messages, disconnected: false };
 });
+
+export const getMicrosoftStatusServer = createServerFn({ method: 'GET' }).handler(async (): Promise<MicrosoftStatus> => {
+	const response = await serverFetch('/api/email/microsoft/status');
+	if (!response.ok) {
+		throw new Error(`Failed to load Microsoft status (${response.status})`);
+	}
+	return (await response.json()) as MicrosoftStatus;
+});
+
+export const getMicrosoftMessagesServer = createServerFn({ method: 'GET' }).handler(
+	async (): Promise<MicrosoftMessages> => {
+		const response = await serverFetch('/api/email/microsoft/messages');
+		if (!response.ok) {
+			if (response.status === 404) {
+				return { messages: [], disconnected: true };
+			}
+
+			throw new Error(`Failed to load Microsoft messages (${response.status})`);
+		}
+
+		const data = (await response.json()) as { messages: MicrosoftMessage[] };
+		return { messages: data.messages, disconnected: false };
+	}
+);

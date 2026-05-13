@@ -26,7 +26,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 function usage(): never {
 	console.error(
-		`Usage: npm run invite -- --email <email> --org <organizationId> [--role OWNER|MEMBER|EXTERNAL]`
+		`Usage: pnpm invite --email <email> --org <organizationId> [--role OWNER|MEMBER|EXTERNAL]`
 	);
 	process.exit(1);
 }

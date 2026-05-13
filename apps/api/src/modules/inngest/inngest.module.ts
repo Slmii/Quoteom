@@ -1,5 +1,7 @@
 import { GmailModule } from '@/modules/gmail/gmail.module';
+import { MicrosoftModule } from '@/modules/microsoft/microsoft.module';
 import { GmailBackfillFunction } from '@/modules/inngest/functions/gmail-backfill.function';
+import { MicrosoftBackfillFunction } from '@/modules/inngest/functions/microsoft-backfill.function';
 import { Module } from '@nestjs/common';
 
 /**
@@ -14,8 +16,8 @@ import { Module } from '@nestjs/common';
  * the `serve()` array just gets both flavors concatenated.
  */
 @Module({
-	imports: [GmailModule],
-	providers: [GmailBackfillFunction],
-	exports: [GmailBackfillFunction]
+	imports: [GmailModule, MicrosoftModule],
+	providers: [GmailBackfillFunction, MicrosoftBackfillFunction],
+	exports: [GmailBackfillFunction, MicrosoftBackfillFunction]
 })
 export class InngestModule {}

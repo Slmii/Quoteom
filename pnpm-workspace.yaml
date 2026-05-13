@@ -1,0 +1,12 @@
+packages:
+    - 'apps/*'
+    - 'packages/*'
+
+# Post-install build scripts must be explicitly opted in under pnpm 10+.
+onlyBuiltDependencies:
+    - '@prisma/client'
+    - '@prisma/engines'
+    - prisma
+    - '@swc/core'
+    - esbuild
+    - inngest-cli

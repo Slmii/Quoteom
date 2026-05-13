@@ -10,7 +10,7 @@ Solo 14-week MVP build. The build plan lives at `~/.claude/plans/toasty-herding-
 
 ## Stack at a glance
 
-- **Monorepo**: Turborepo + npm workspaces. Node 22+, npm 10+.
+- **Monorepo**: Turborepo + pnpm workspaces. Node 22+, pnpm 10+ (activate via `corepack enable`).
 - **Web**: TanStack Start (React 19, Vite 7) + MUI v9 + TanStack Query v5. SSR-first.
 - **API**: NestJS 11 (Express + CommonJS, plain `tsc`) + Prisma 7 (`prisma-client` generator + `@prisma/adapter-pg`) + Postgres 16 (Docker locally).
 - **Auth**: Auth.js v5 mounted as Express middleware at `/api/auth/*` (magic link via Resend + Google + Microsoft Entra). JWT sessions.
@@ -22,46 +22,46 @@ Solo 14-week MVP build. The build plan lives at `~/.claude/plans/toasty-herding-
 Run from repo root unless specified. All scripts are turbo-orchestrated:
 
 ```bash
-npm install                        # bootstrap workspaces
-npm run dev                        # api + web in watch mode
-npm run typecheck                  # tsc --noEmit across both apps
-npm run lint                       # eslint
-npm run format                     # prettier --write
-npm run test                       # runs jest (api) + vitest (web)
+pnpm install                       # bootstrap workspaces
+pnpm dev                           # api + web in watch mode
+pnpm typecheck                     # tsc --noEmit across both apps
+pnpm lint                          # eslint
+pnpm format                        # prettier --write
+pnpm test                          # runs jest (api) + vitest (web)
 ```
 
 API-specific (in `apps/api/`):
 
 ```bash
-npm run db:up                      # docker compose: local Postgres
-npm run db:down
-npm run db:migrate                 # prisma migrate dev
-npm run db:deploy                  # prisma migrate deploy (prod)
-npm run db:generate                # regen Prisma client into src/generated/prisma/
-npm run db:studio
-npm run db:seed                    # prisma db seed (runs prisma/seed.ts via tsx)
-npm run dev                        # nest start --watch
-npm run invite -- --email a@b.com --org <uuid> [--role MEMBER|OWNER|EXTERNAL]
+pnpm db:up                         # docker compose: local Postgres
+pnpm db:down
+pnpm db:migrate                    # prisma migrate dev
+pnpm db:deploy                     # prisma migrate deploy (prod)
+pnpm db:generate                   # regen Prisma client into src/generated/prisma/
+pnpm db:studio
+pnpm db:seed                       # prisma db seed (runs prisma/seed.ts via tsx)
+pnpm dev                           # nest start --watch
+pnpm invite --email a@b.com --org <uuid> [--role MEMBER|OWNER|EXTERNAL]
 ```
 
 Web-specific (in `apps/web/`):
 
 ```bash
-npm run dev                        # vite dev (port 3000, proxies /api → 3001)
-npm run build                      # vite build (.output/)
-npm run start                      # node .output/server/index.mjs
-npm run test                       # vitest run
+pnpm dev                           # vite dev (port 3000, proxies /api → 3001)
+pnpm build                         # vite build (.output/)
+pnpm start                         # node .output/server/index.mjs
+pnpm test                          # vitest run
 ```
 
 Single test runs:
 
 ```bash
-# API (Jest)
-cd apps/api && npx jest src/modules/billing/billing.service.spec.ts
-cd apps/api && npx jest -t "syncFromStripe clears state"
+# API (Jest) — from apps/api/
+pnpm exec jest src/modules/billing/billing.service.spec.ts
+pnpm exec jest -t "syncFromStripe clears state"
 
-# Web (Vitest)
-cd apps/web && npx vitest run src/lib/utils/foo.test.ts
+# Web (Vitest) — from apps/web/
+pnpm exec vitest run src/lib/utils/foo.test.ts
 ```
 
 ## High-level architecture
@@ -219,10 +219,10 @@ Local dev needs the Inngest CLI running alongside the API:
 
 ```bash
 # Terminal 1
-npm run dev                                              # API + web
+pnpm dev                                                 # API + web
 
 # Terminal 2
-npx inngest-cli@latest dev                               # discovers /api/inngest
+pnpm --filter @quoteom/api inngest                       # discovers /api/inngest (pinned inngest-cli devDep)
 # Open http://localhost:8288 — every registered function shows up here.
 ```
 

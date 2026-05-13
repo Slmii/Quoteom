@@ -4,13 +4,16 @@ import type { EnvSchema } from '@/config/env.schema';
 import { EmailProvider } from '@/generated/prisma/enums';
 import { OAUTH_CODE_MISSING, OAUTH_STATE_INVALID } from '@/lib/errors';
 import { issueOAuthState, verifyOAuthState } from '@/lib/oauth/signed-state';
-import { GmailDisconnectResponseDto } from '@/modules/gmail/dto/disconnect.response.dto';
-import { GmailMessageDto, GmailMessagesResponseDto } from '@/modules/gmail/dto/gmail-messages.response.dto';
-import { GmailStatusResponseDto } from '@/modules/gmail/dto/gmail-status.response.dto';
 import { EmailAccountsService, type MailboxScope } from '@/modules/email-accounts/email-accounts.service';
-import { GmailApiService } from '@/modules/gmail/gmail-api.service';
-import { GMAIL_STATE_COOKIE } from '@/modules/gmail/gmail.constants';
-import { GoogleOAuthService } from '@/modules/email-accounts/google-oauth.service';
+import { MicrosoftDisconnectResponseDto } from '@/modules/microsoft/dto/microsoft-disconnect.response.dto';
+import {
+	MicrosoftMessageDto,
+	MicrosoftMessagesResponseDto
+} from '@/modules/microsoft/dto/microsoft-messages.response.dto';
+import { MicrosoftStatusResponseDto } from '@/modules/microsoft/dto/microsoft-status.response.dto';
+import { MicrosoftGraphApiService } from '@/modules/microsoft/microsoft-graph-api.service';
+import { MicrosoftOAuthService } from '@/modules/email-accounts/microsoft-oauth.service';
+import { MICROSOFT_STATE_COOKIE } from '@/modules/microsoft/microsoft.constants';
 import {
 	BadRequestException,
 	Controller,
@@ -54,31 +57,30 @@ function scopeFromRequest(request: Request): MailboxScope {
 	const userId = request.authSession?.user?.id;
 	const organizationId = request.organizationId;
 	if (!userId || !organizationId) {
-		// Guards run before us, so this is a defensive narrowing assertion.
 		throw new UnauthorizedException();
 	}
-	return { provider: EmailProvider.GMAIL, organizationId, userId };
+	return { provider: EmailProvider.MICROSOFT, organizationId, userId };
 }
 
 /**
- * Each user manages their own mailbox connection inside the active organization:
- *  - `connect` / `callback` / `disconnect` are writes — gated by `@MemberWrite()` so
- *    EXTERNAL collaborators can't contribute primary mailbox data, AND so unsubscribed
- *    orgs can't add new connections (the same entitlement gate as invitations).
- *  - `status` / `messages` are reads — `TenantMemberGuard` alone (EXTERNAL still blocked
- *    so they don't peek at whose mailbox is linked).
+ * Microsoft Graph inbox-connect — mirrors `GmailController` shape with provider-specific
+ * routing. Lives under `/api/email/microsoft/*`.
+ *
+ * Per-user mailboxes, OWNER + MEMBER (no EXTERNAL), entitlement-gated writes — same rules
+ * as Gmail. The actual handshake differs (Entra endpoints, different scopes, no programmatic
+ * revoke) but those details are encapsulated in `MicrosoftOAuthService`.
  */
 @ApiTags('email')
-@Controller('email/gmail')
-export class GmailController {
+@Controller('email/microsoft')
+export class MicrosoftController {
 	constructor(
-		private readonly oauth: GoogleOAuthService,
-		private readonly api: GmailApiService,
+		private readonly oauth: MicrosoftOAuthService,
+		private readonly api: MicrosoftGraphApiService,
 		private readonly accounts: EmailAccountsService,
 		private readonly config: ConfigService<EnvSchema, true>
 	) {}
 
-	@ApiOperation({ summary: 'Start the Gmail OAuth handshake (redirects to Google).' })
+	@ApiOperation({ summary: 'Start the Microsoft OAuth handshake (redirects to Entra).' })
 	@MemberWrite()
 	@Get('connect')
 	connect(@Req() request: Request, @Res() response: Response): void {
@@ -87,16 +89,12 @@ export class GmailController {
 		const secret = this.config.get('AUTH_SECRET', { infer: true });
 		const state = issueOAuthState({ organizationId, userId }, secret);
 
-		// Cookie carries the same state value, signed by the same secret. Callback compares
-		// both copies and rejects mismatch. httpOnly + sameSite=lax keeps it out of JS and
-		// lets it survive the Google → back-to-our-callback redirect (which is a top-level
-		// navigation, not a cross-site fetch).
-		response.cookie(GMAIL_STATE_COOKIE, state, {
+		response.cookie(MICROSOFT_STATE_COOKIE, state, {
 			httpOnly: true,
 			sameSite: 'lax',
 			secure: this.config.get('NODE_ENV', { infer: true }) === 'production',
 			maxAge: 10 * 60 * 1000,
-			path: '/api/email/gmail/callback'
+			path: '/api/email/microsoft/callback'
 		});
 
 		const authorizeUrl = this.oauth.buildAuthorizeUrl(state);
@@ -116,10 +114,7 @@ export class GmailController {
 		@Query('error') error: string | undefined
 	): Promise<void> {
 		const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
-
-		// User clicked "Cancel" or Google returned an error — bounce back with the error
-		// surface visible so the UI can render it. Always clear the state cookie either way.
-		response.clearCookie(GMAIL_STATE_COOKIE, { path: '/api/email/gmail/callback' });
+		response.clearCookie(MICROSOFT_STATE_COOKIE, { path: '/api/email/microsoft/callback' });
 
 		if (error) {
 			response.redirect(`${webOrigin}/settings/email?error=${encodeURIComponent(error)}`);
@@ -130,7 +125,7 @@ export class GmailController {
 			throw new BadRequestException(OAUTH_CODE_MISSING);
 		}
 
-		const cookieState = readCookie(request, GMAIL_STATE_COOKIE);
+		const cookieState = readCookie(request, MICROSOFT_STATE_COOKIE);
 		if (!cookieState || cookieState !== state) {
 			throw new BadRequestException(OAUTH_STATE_INVALID);
 		}
@@ -141,35 +136,36 @@ export class GmailController {
 			throw new BadRequestException(OAUTH_STATE_INVALID);
 		}
 
-		// Cross-check the signed payload against the live session. The guard already
-		// confirmed this user belongs to `request.organizationId`; we additionally
-		// require the connect-initiation org/user to match — defense against a stale
-		// cookie surviving a logout + login as someone else.
 		const { organizationId, userId } = scopeFromRequest(request);
 		if (payload.organizationId !== organizationId || payload.userId !== userId) {
 			throw new BadRequestException(OAUTH_STATE_INVALID);
 		}
 
 		const tokens = await this.oauth.exchangeCode(code);
-		const userInfo = await this.oauth.fetchUserInfo(tokens.accessToken);
+		const profile = await this.oauth.fetchUserInfo(tokens.accessToken);
+
+		// Microsoft profiles don't always have `mail` populated (personal accounts that
+		// haven't set up email forwarding return null). Fall back to `userPrincipalName`,
+		// which is email-shaped for both work and consumer Microsoft accounts.
+		const email = profile.mail ?? profile.userPrincipalName;
 
 		await this.accounts.upsertEmailAccount({
-			provider: EmailProvider.GMAIL,
+			provider: EmailProvider.MICROSOFT,
 			organizationId,
 			userId,
-			providerAccountId: userInfo.sub,
-			email: userInfo.email,
+			providerAccountId: profile.id,
+			email,
 			tokens
 		});
 
 		response.redirect(`${webOrigin}/settings/email?connected=1`);
 	}
 
-	@ApiOperation({ summary: 'Is THIS user’s Gmail mailbox connected for the active org?' })
-	@ApiOkResponse({ type: GmailStatusResponseDto })
+	@ApiOperation({ summary: 'Is THIS user’s Microsoft mailbox connected for the active org?' })
+	@ApiOkResponse({ type: MicrosoftStatusResponseDto })
 	@UseGuards(TenantMemberGuard)
 	@Get('status')
-	async status(@Req() request: Request): Promise<GmailStatusResponseDto> {
+	async status(@Req() request: Request): Promise<MicrosoftStatusResponseDto> {
 		const scope = scopeFromRequest(request);
 		const account = await this.accounts.findEmailAccount(scope);
 		return {
@@ -180,45 +176,36 @@ export class GmailController {
 	}
 
 	@ApiOperation({
-		summary: `Smoke endpoint: the ${RECENT_MESSAGE_LIMIT} most recent message IDs from THIS user’s connected mailbox.`
+		summary: `Smoke endpoint: the ${RECENT_MESSAGE_LIMIT} most recent inbox messages from THIS user’s connected mailbox.`
 	})
-	@ApiOkResponse({ type: GmailMessagesResponseDto })
+	@ApiOkResponse({ type: MicrosoftMessagesResponseDto })
 	@UseGuards(TenantMemberGuard)
 	@Get('messages')
-	async messages(@Req() request: Request): Promise<GmailMessagesResponseDto> {
+	async messages(@Req() request: Request): Promise<MicrosoftMessagesResponseDto> {
 		const scope = scopeFromRequest(request);
 
-		// `withFreshAccessToken` retries once on Gmail 401 — covers the case where the
-		// user revoked our app at myaccount.google.com while the cached access token still
-		// looked fresh on our side. If the retry's forced refresh hits `invalid_grant`,
-		// the EmailAccount row is deleted and a 404 propagates (web layer → empty list).
 		const messages = await this.accounts.withFreshAccessToken(scope, async accessToken => {
-			const stubs = await this.api.listRecentMessages(accessToken, RECENT_MESSAGE_LIMIT);
-
-			// Fetch metadata for each in parallel. Gmail's per-user QPS limits are generous
-			// (~250 quota units / user / sec; messages.get costs 5). Ten parallel calls is fine.
-			const metadata = await Promise.all(stubs.map(stub => this.api.getMessageMetadata(accessToken, stub.id)));
-
-			return metadata.map<GmailMessageDto>(m => ({
+			const stubs = await this.api.listRecentInboxMessages(accessToken, RECENT_MESSAGE_LIMIT);
+			return stubs.map<MicrosoftMessageDto>(m => ({
 				id: m.id,
-				threadId: m.threadId,
-				// `internalDate` is unix ms as string from Gmail; render as ISO for the UI.
-				internalDate: new Date(Number(m.internalDate)).toISOString(),
-				snippet: m.snippet,
+				conversationId: m.conversationId,
+				receivedDateTime: m.receivedDateTime,
+				bodyPreview: m.bodyPreview,
 				subject: m.subject,
-				from: m.from
+				fromEmail: m.from?.address ?? null,
+				fromName: m.from?.name ?? null
 			}));
 		});
 
 		return { messages };
 	}
 
-	@ApiOperation({ summary: 'Revoke THIS user’s Gmail token at Google + clear the local row.' })
-	@ApiOkResponse({ type: GmailDisconnectResponseDto })
+	@ApiOperation({ summary: 'Disconnect THIS user’s Microsoft mailbox.' })
+	@ApiOkResponse({ type: MicrosoftDisconnectResponseDto })
 	@MemberWrite()
 	@HttpCode(HttpStatus.OK)
 	@Post('disconnect')
-	async disconnect(@Req() request: Request): Promise<GmailDisconnectResponseDto> {
+	async disconnect(@Req() request: Request): Promise<MicrosoftDisconnectResponseDto> {
 		const scope = scopeFromRequest(request);
 		await this.accounts.disconnectEmailAccount(scope);
 		return { ok: true };

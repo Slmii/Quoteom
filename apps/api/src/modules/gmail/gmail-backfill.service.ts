@@ -1,6 +1,6 @@
 import { EmailProvider } from '@/generated/prisma/enums';
 import { EMAIL_ACCOUNT_NOT_FOUND } from '@/lib/errors';
-import { EmailAccountsService } from '@/modules/gmail/email-accounts.service';
+import { EmailAccountsService } from '@/modules/email-accounts/email-accounts.service';
 import type { GmailFullMessage } from '@/modules/gmail/gmail-api.service';
 import { GmailApiService } from '@/modules/gmail/gmail-api.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
@@ -73,7 +73,11 @@ export class GmailBackfillService {
 			return { emailAccountId, pagesFetched: 0, messagesInserted: 0, messagesSkipped: 0, historyId: null };
 		}
 
-		const scope = { organizationId: account.organizationId, userId: account.userId };
+		const scope = {
+			provider: EmailProvider.GMAIL,
+			organizationId: account.organizationId,
+			userId: account.userId
+		};
 		const cutoff = formatGmailDateQuery(new Date(Date.now() - BACKFILL_DAYS * 24 * 60 * 60 * 1000));
 		// `in:inbox` scopes to RECEIVED mail only — what the W4 classifier cares about.
 		// Without it, Gmail's `messages.list` defaults to all labels (Inbox, Sent, Drafts,

@@ -1,8 +1,8 @@
 # Local-only Postgres for development. Production uses DigitalOcean Managed Postgres
 # (provisioned via .do/app.yaml). Schema + migrations live under prisma/.
 #
-# Bring up:  `npm run db:up`   (alias for docker compose up -d, run from apps/api)
-# Tear down: `npm run db:down`
+# Bring up:  `pnpm db:up`   (alias for docker compose up -d, run from apps/api)
+# Tear down: `pnpm db:down`
 # Connect:   `psql postgresql://quoteom:quoteom@localhost:5432/quoteom`
 
 services:

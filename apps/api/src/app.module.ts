@@ -3,9 +3,11 @@ import { AppService } from '@/app.service';
 import { validateEnv } from '@/config/env.schema';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BillingModule } from '@/modules/billing/billing.module';
+import { EmailAccountsModule } from '@/modules/email-accounts/email-accounts.module';
 import { GmailModule } from '@/modules/gmail/gmail.module';
 import { InngestModule } from '@/modules/inngest/inngest.module';
 import { InvitationsModule } from '@/modules/invitations/invitations.module';
+import { MicrosoftModule } from '@/modules/microsoft/microsoft.module';
 import { LogModule } from '@/modules/logger/log.module';
 import { MeModule } from '@/modules/me/me.module';
 import { PrismaModule } from '@/modules/prisma/prisma.module';
@@ -40,7 +42,9 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 		InvitationsModule,
 		MeModule,
 		BillingModule,
+		EmailAccountsModule,
 		GmailModule,
+		MicrosoftModule,
 		InngestModule
 	],
 	controllers: [AppController],

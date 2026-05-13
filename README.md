@@ -6,7 +6,7 @@ AI offerte management for Dutch SMBs. Reads inbox + WhatsApp, extracts quote req
 
 - **Frontend**: TanStack Start (React 19) + MUI v9 + TanStack Query
 - **Backend**: NestJS 11 + Prisma 7 + Postgres 16
-- **Build**: Turborepo + npm workspaces
+- **Build**: Turborepo + pnpm workspaces
 - **Deploy**: DigitalOcean App Platform (EU)
 
 ## Structure
@@ -19,21 +19,21 @@ apps/
 
 ## Quickstart
 
-Prerequisites: Node 22+, Docker.
+Prerequisites: Node 22+, Docker. pnpm is activated via Node's bundled corepack — run `corepack enable` once.
 
 ```bash
 # install
-npm install
+pnpm install
 
 # env
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 
 # local Postgres
-cd apps/api && npm run db:up
+cd apps/api && pnpm db:up
 
 # everything in dev mode
-cd ../.. && npm run dev
+cd ../.. && pnpm dev
 ```
 
 - API: http://localhost:3001 (Swagger at `/docs`)
@@ -43,13 +43,13 @@ cd ../.. && npm run dev
 
 Root (runs across all apps via turbo):
 
-| Script              | What                    |
-| ------------------- | ----------------------- |
-| `npm run dev`       | api + web in watch mode |
-| `npm run build`     | builds both apps        |
-| `npm run typecheck` | tsc on both             |
-| `npm run lint`      | eslint on both          |
-| `npm run format`    | prettier --write        |
+| Script           | What                    |
+| ---------------- | ----------------------- |
+| `pnpm dev`       | api + web in watch mode |
+| `pnpm build`     | builds both apps        |
+| `pnpm typecheck` | tsc on both             |
+| `pnpm lint`      | eslint on both          |
+| `pnpm format`    | prettier --write        |
 
 `apps/api`:
 
@@ -126,7 +126,7 @@ doctl apps create-deployment <APP_ID> \
 ```bash
 # In a local clone, generate a corrective migration:
 cd apps/api
-npx prisma migrate dev --name revert_<thing>
+pnpm exec prisma migrate dev --name revert_<thing>
 # Push to main — the next PRE_DEPLOY job runs it against prod.
 ```
 

@@ -1,5 +1,5 @@
+import { MailboxUnauthorizedException } from '@/lib/oauth/oauth-errors';
 import { GMAIL_API_BASE } from '@/modules/gmail/gmail.constants';
-import { GmailUnauthorizedException } from '@/modules/gmail/oauth-errors';
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 
 export interface GmailMessageHeader {
@@ -59,7 +59,7 @@ export interface GmailProfile {
 /**
  * Minimal Gmail v1 client. Direct fetch wrappers — no `googleapis` dep.
  *
- * 401 handling: every method throws `GmailUnauthorizedException` on a 401 so the caller
+ * 401 handling: every method throws `MailboxUnauthorizedException` on a 401 so the caller
  * (typically `EmailAccountsService.withFreshAccessToken`) can force a token refresh +
  * retry exactly once. Other non-2xx responses bubble as a generic 500.
  */
@@ -153,7 +153,7 @@ export class GmailApiService {
 		});
 
 		if (response.status === 401) {
-			throw new GmailUnauthorizedException();
+			throw new MailboxUnauthorizedException();
 		}
 
 		if (!response.ok) {
@@ -181,7 +181,7 @@ export class GmailApiService {
 		});
 
 		if (response.status === 401) {
-			throw new GmailUnauthorizedException();
+			throw new MailboxUnauthorizedException();
 		}
 
 		if (!response.ok) {

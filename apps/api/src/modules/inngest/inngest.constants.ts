@@ -17,8 +17,10 @@
  */
 
 export const InngestEvents = {
-	/** Fired by `EmailAccountsService.upsertGmail` after a successful OAuth handshake. */
-	GmailAccountConnected: 'gmail/account.connected'
+	/** Fired by `EmailAccountsService.upsertEmailAccount` after a successful Gmail OAuth handshake. */
+	GmailAccountConnected: 'gmail/account.connected',
+	/** Fired by `EmailAccountsService.upsertEmailAccount` after a successful Microsoft OAuth handshake. */
+	MicrosoftAccountConnected: 'microsoft/account.connected'
 } as const;
 
 export type InngestEventName = (typeof InngestEvents)[keyof typeof InngestEvents];
@@ -28,8 +30,10 @@ export const InngestFunctionIds = {
 	Hello: 'hello',
 	/** W3.3 smoke — cron-scheduled `0 * * * *`. */
 	Heartbeat: 'heartbeat',
-	/** W3.4 backfill — fetches last 30 days into `RawMessage` on `GmailAccountConnected`. */
-	GmailBackfill: 'gmail-backfill'
+	/** W3.4 backfill — fetches last 90 days into `RawMessage` on `GmailAccountConnected`. */
+	GmailBackfill: 'gmail-backfill',
+	/** W3.2 backfill — same shape as Gmail's, against Microsoft Graph. */
+	MicrosoftBackfill: 'microsoft-backfill'
 } as const;
 
 /**
@@ -45,7 +49,10 @@ export const InngestSteps = {
 		RecordTick: 'record-tick'
 	},
 	GmailBackfill: {
-		/** The whole 30-day fetch + persist loop. One step today; split later if it timeouts. */
+		/** The whole 90-day fetch + persist loop. One step today; split later if it timeouts. */
+		Backfill: 'backfill'
+	},
+	MicrosoftBackfill: {
 		Backfill: 'backfill'
 	}
 } as const;

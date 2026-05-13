@@ -7,7 +7,7 @@ import {
 	GOOGLE_OAUTH_TOKEN_URL,
 	GOOGLE_OAUTH_USERINFO_URL
 } from '@/modules/gmail/gmail.constants';
-import { OAuthRefreshTokenInvalidException } from '@/modules/gmail/oauth-errors';
+import { OAuthRefreshTokenInvalidException } from '@/lib/oauth/oauth-errors';
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 

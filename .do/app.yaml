@@ -32,7 +32,7 @@ services:
       github:
           branch: main
           deploy_on_push: true
-      build_command: npm ci && npx turbo run build --filter=@quoteom/api
+      build_command: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@quoteom/api
       run_command: node apps/api/dist/main.js
       environment_slug: node-js
       http_port: 3001
@@ -116,7 +116,7 @@ services:
           deploy_on_push: true
       # VITE_API_URL is baked in at build time, so it has to be exported during the build.
       # The web app calls the api via the same App Platform hostname under /api/*.
-      build_command: VITE_API_URL=${APP_URL} npm ci && VITE_API_URL=${APP_URL} npx turbo run build --filter=@quoteom/web
+      build_command: corepack enable && VITE_API_URL=${APP_URL} pnpm install --frozen-lockfile && VITE_API_URL=${APP_URL} pnpm turbo run build --filter=@quoteom/web
       run_command: node apps/web/.output/server/index.mjs
       environment_slug: node-js
       http_port: 3000
@@ -143,7 +143,7 @@ jobs:
       github:
           branch: main
           deploy_on_push: true
-      build_command: npm ci --include=dev && npx turbo run db:generate --filter=@quoteom/api
+      build_command: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run db:generate --filter=@quoteom/api
       run_command: cd apps/api && npx prisma migrate deploy
       environment_slug: node-js
       instance_size_slug: basic-xxs

@@ -13,10 +13,10 @@ Living document. **Add a new section whenever a feature is built.** Each test ca
 
 ```bash
 cd apps/api
-npm run db:up                          # Postgres in Docker
-npm run db:migrate                     # apply latest migrations
-npm run db:seed                        # 2 orgs, 4 users, 5 memberships
-npm run dev                            # in this terminal — leave running
+pnpm db:up                          # Postgres in Docker
+pnpm db:migrate                     # apply latest migrations
+pnpm db:seed                        # 2 orgs, 4 users, 5 memberships
+pnpm dev                            # in this terminal — leave running
 ```
 
 In a second terminal, keep cookies between requests:
@@ -89,7 +89,7 @@ COOKIES=/tmp/quoteom.cookies
 ### AUTH-02: Self-signup is blocked (unknown email)
 - [ ] Submit `nobody@example.com` at `/api/auth/signin`.
 - [ ] **Expect** API console warning: `[auth] Sign-in attempted for unknown email: nobody@example.com`.
-- [ ] No email sent, no `User` row created (verify in `npm run db:studio` → User table).
+- [ ] No email sent, no `User` row created (verify in `pnpm db:studio` → User table).
 - [ ] Page shows generic "check your email" success (privacy — doesn't reveal nonexistence).
 
 ### AUTH-03: Sign-out
@@ -108,7 +108,7 @@ COOKIES=/tmp/quoteom.cookies
 ## Invitations (W2.2)
 
 ### INV-01: Mint an invitation via CLI
-- [ ] `npm run invite -- --email newuser@example.com --org 00000000-0000-0000-0000-000000000001`
+- [ ] `pnpm invite --email newuser@example.com --org 00000000-0000-0000-0000-000000000001`
 - [ ] **Expect** stdout shows `Invitation created` + the token.
 - [ ] In console (dev): `Invite for newuser@example.com to Acme Installaties: http://localhost:3000/accept-invite?token=…`.
 - [ ] In Prisma Studio → `Invitation` table: row exists with `email`, `organizationId`, `role: MEMBER`, `expiresAt` ~7 days out, `acceptedAt: null`.
@@ -296,18 +296,18 @@ COOKIES=/tmp/quoteom.cookies
 ## Database
 
 ### DB-01: Reset + reseed
-- [ ] `npm run db:up && npx prisma migrate reset --force && npm run db:seed`
+- [ ] `pnpm db:up && npx prisma migrate reset --force && pnpm db:seed`
 - [ ] **Expect** all tables empty except seed data (2 orgs, 4 users, 5 memberships, 0 invitations, 0 logs).
 
 ### DB-02: Migration idempotency
-- [ ] `npm run db:migrate` (no schema changes since last run).
+- [ ] `pnpm db:migrate` (no schema changes since last run).
 - [ ] **Expect** `Already in sync, no schema change or pending migration was found.`
 
 ---
 
 ## Web — sign-in / verify-request / accept-invite (W2.3)
 
-Pre-requisite: API running (`cd apps/api && npm run dev`) AND web running (`cd apps/web && npm run dev`). Visit `http://localhost:3000`.
+Pre-requisite: API running (`cd apps/api && pnpm dev`) AND web running (`cd apps/web && pnpm dev`). Visit `http://localhost:3000`.
 
 ### WEB-01: Anonymous home page
 - [ ] Open `http://localhost:3000/` in a fresh browser / incognito.
@@ -337,7 +337,7 @@ Pre-requisite: API running (`cd apps/api && npm run dev`) AND web running (`cd a
 - [ ] Refresh the page; **expect** still anonymous (cookie was actually cleared).
 
 ### WEB-05: Accept-invite page — happy path (new user)
-- [ ] Mint an invite for a fresh email: `npm run invite -- --email newperson@example.com --org 00000000-0000-0000-0000-000000000001` (from `apps/api/`).
+- [ ] Mint an invite for a fresh email: `pnpm invite --email newperson@example.com --org 00000000-0000-0000-0000-000000000001` (from `apps/api/`).
 - [ ] Grab the URL from the dev console (or inbox).
 - [ ] Open the URL in browser. URL shape: `http://localhost:3000/accept-invite?token=...`.
 - [ ] **Expect** brief "Accepting invitation..." spinner, then:
@@ -636,7 +636,7 @@ Setup once: in Google Cloud Console, register an OAuth client with TWO authorize
 - [ ] **Expect** JSON containing `"functions"` array with at least `hello` and `heartbeat` entries. Their `triggers` field reflects what the source code declares (`test/hello` event for hello, `0 * * * *` cron for heartbeat).
 
 ### INNGEST-02: Hello smoke fires end-to-end
-- [ ] Terminal A: `npm run dev` (API up).
+- [ ] Terminal A: `pnpm dev` (API up).
 - [ ] Terminal B: `npx inngest-cli@latest dev` → prints "Inngest dev server is up" at `http://localhost:8288`.
 - [ ] In the dev UI **Functions** tab: `hello` and `heartbeat` both visible. CLI auto-discovered them via `/api/inngest`.
 - [ ] In the dev UI: **New event** → name `test/hello` → data `{"name": "Quoteom"}` → **Send**.
@@ -678,6 +678,47 @@ Setup once: in Google Cloud Console, register an OAuth client with TWO authorize
 - [ ] **Expect**: the first Gmail API call mid-backfill returns 401 → `withFreshAccessToken` force-refreshes → `invalid_grant` → `EmailAccountsService` deletes the row + throws `NotFoundException`. Backfill function surfaces the error.
 - [ ] **Expect** DB: zero `EmailAccount` + zero `RawMessage` rows for this user (cascade).
 - [ ] **Expect** UI: chip flips to **Not connected** within 5 s thanks to the 5 s polling refetch — no manual refresh needed.
+
+### MS-01: Happy path — owner connects Microsoft and sees 10 messages
+Setup once: register an app in https://entra.microsoft.com → App Registrations → New. Redirect URI `http://localhost:3000/api/email/microsoft/callback` (type: Web). Under **Authentication**, allow "Personal Microsoft accounts" if you'll test with outlook.com. Under **Certificates & secrets**, create a client secret. Under **API permissions** → Microsoft Graph → Delegated: `Mail.Read`, `Mail.Send`, `User.Read`, `offline_access`, `openid`, `email`, `profile`. Paste client ID + secret + tenant id (or leave default `common`) into `apps/api/.env`.
+- [ ] Sign in as the org `OWNER`. Visit `/settings/email` → both Gmail + Microsoft sections render with **"Not connected"** chips.
+- [ ] Click **Connect Microsoft (Outlook)** → browser bounces to `login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize`. Consent screen lists the requested scopes including **Read your mail** and **Send mail as you**.
+- [ ] Grant consent → browser returns to `/settings/email?connected=1`.
+- [ ] **Expect** Microsoft section chip flips to **Connected**, "Connected as `<your-email>`" appears, the 10 most recent inbox messages render below with subject + from + timestamp.
+- [ ] DB check: one `EmailAccount` row with `provider = 'MICROSOFT'`, `email` matches the connected mailbox, `scope` contains both `Mail.Read` and `Mail.Send`. `accessToken` + `refreshToken` both start with `v1:` (encrypted).
+- [ ] API check: `curl -i http://localhost:3001/api/email/microsoft/status -b $COOKIES` returns `{ connected: true, email: '<mailbox>', connectedAt: '<iso>' }`.
+- [ ] Verify `Provider sections are independent`: connecting Microsoft doesn't affect Gmail's `EmailAccount` row (both can coexist on the same org/user).
+
+### MS-02: Disconnect + reconnect re-prompts consent
+- [ ] After MS-01: click **Disconnect** under Microsoft → chip flips to **Not connected**.
+- [ ] DB check: only the Microsoft `EmailAccount` row is gone. Gmail's row (if connected) is unaffected.
+- [ ] No Microsoft programmatic revoke (Entra doesn't expose one). User can revoke manually via https://account.microsoft.com/privacy → "Apps and services that can access your data" if they want to fully reset consent.
+- [ ] Click **Connect Microsoft (Outlook)** again → consent screen appears again (because `prompt=consent` forces it). Grant → new row, FRESH refresh token (different ciphertext than MS-01's).
+
+### MS-03: State CSRF guard rejects mismatched callbacks
+- [ ] Same flow as EMAIL-03 but for `q_ms_oauth_state` cookie + `/api/email/microsoft/callback`. Tamper test, missing-cookie test, expired-state test — all should HTTP 400.
+
+### MS-04: Refresh-token rotation
+**This is the key Microsoft-specific behavior** — Microsoft rotates refresh tokens on every refresh; Gmail does not.
+- [ ] Connect Microsoft. `SELECT "refreshToken" FROM "EmailAccount" WHERE provider = 'MICROSOFT';` — note the ciphertext.
+- [ ] Force the access token to look expired: `UPDATE "EmailAccount" SET "accessTokenExpiresAt" = NOW() - INTERVAL '5 minutes' WHERE provider = 'MICROSOFT';`
+- [ ] Visit `/settings/email` → status refresh fires.
+- [ ] **Expect** DB: BOTH `accessToken` AND `refreshToken` columns have NEW ciphertext compared to the noted value. (For Gmail this same test would show only `accessToken` rotating — Gmail reuses refresh tokens.)
+- [ ] `accessTokenExpiresAt` is now ~1 h in the future.
+
+### MS-05: Backfill — Microsoft Graph happy path
+- [ ] Connect Microsoft. UI shows "Importing your last 90 days..."
+- [ ] Inngest dev UI Runs tab: a `microsoft-backfill` run completes within ~30 s. Output shaped `{ emailAccountId, pagesFetched, messagesInserted, messagesSkipped }`.
+- [ ] DB: `SELECT count(*) FROM "RawMessage" WHERE "emailAccountId" = '<ms-id>';` matches `messagesInserted`.
+- [ ] **Expect** `RawMessage.raw` contains the full Graph payload (with `subject`, `body.contentType`, `body.content`, `from.emailAddress.address`, etc.).
+- [ ] **Expect** `RawMessage.threadId` is populated from Graph's `conversationId` (used by W5.6 thread reconstruction).
+- [ ] Note: Microsoft mailboxes don't get a `historyId` in `EmailAccount` — Graph push uses a different cursor (W3.6).
+
+### MS-06: Per-user isolation — multi-provider parity
+- [ ] Same org. Member A connects Gmail. Member B connects Microsoft. DB shows 2 `EmailAccount` rows (different `userId`, different `provider`).
+- [ ] Member A's `/settings/email` shows Gmail "Connected as A", Microsoft "Not connected".
+- [ ] Member B's `/settings/email` shows Gmail "Not connected", Microsoft "Connected as B".
+- [ ] Each can disconnect their own row without affecting the other.
 
 ### INNGEST-04: Auth.js + Inngest don't collide on /api/* mounting
 - [ ] Confirm `GET /api/auth/session` still returns the session (Auth.js) and `GET /api/inngest` returns the function list (Inngest). Both are app-level Express middleware mounted before NestJS pipes — order in `main.ts` is `/api/auth` then `/api/inngest`. Adding a NestJS controller for either prefix would shadow them and break this test.

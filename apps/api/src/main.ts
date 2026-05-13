@@ -8,6 +8,7 @@ import type { EnvSchema } from '@/config/env.schema';
 import { authConfig } from '@/modules/auth/auth.config';
 import { inngestFunctions } from '@/modules/inngest/functions';
 import { GmailBackfillFunction } from '@/modules/inngest/functions/gmail-backfill.function';
+import { MicrosoftBackfillFunction } from '@/modules/inngest/functions/microsoft-backfill.function';
 import { inngest } from '@/modules/inngest/inngest.client';
 import { LogService } from '@/modules/logger/log.service';
 import { ExpressAuth } from '@auth/express';
@@ -74,11 +75,12 @@ async function bootstrap() {
 	//   - DI-aware `@Injectable()` wrappers — each exposes `.inngestFn`. New wrappers add
 	//     a class entry to `InngestModule` providers + a `.get()` line here.
 	const gmailBackfill = app.get(GmailBackfillFunction);
+	const microsoftBackfill = app.get(MicrosoftBackfillFunction);
 	app.use(
 		'/api/inngest',
 		inngestServe({
 			client: inngest,
-			functions: [...inngestFunctions, gmailBackfill.inngestFn]
+			functions: [...inngestFunctions, gmailBackfill.inngestFn, microsoftBackfill.inngestFn]
 		})
 	);
 

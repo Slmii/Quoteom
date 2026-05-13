@@ -1,30 +1,28 @@
 import { AuthModule } from '@/modules/auth/auth.module';
-import { EmailAccountsService } from '@/modules/gmail/email-accounts.service';
+import { EmailAccountsModule } from '@/modules/email-accounts/email-accounts.module';
 import { GmailApiService } from '@/modules/gmail/gmail-api.service';
 import { GmailBackfillService } from '@/modules/gmail/gmail-backfill.service';
 import { GmailController } from '@/modules/gmail/gmail.controller';
-import { GoogleOAuthService } from '@/modules/gmail/google-oauth.service';
 import { Module } from '@nestjs/common';
 
 /**
- * Gmail integration (W3.1 + W3.4).
+ * Gmail integration (W3.1 + W3.4). Hosts the Gmail-specific HTTP routes, REST client,
+ * and backfill worker.
  *
- * Provides:
- *  - `GoogleOAuthService`     — pure OAuth2 client (authorize URL, exchange, refresh, revoke, userinfo).
- *  - `GmailApiService`        — thin Gmail v1 REST wrapper.
- *  - `EmailAccountsService`   — Prisma + encryption layer; transparently refreshes tokens on demand.
- *  - `GmailBackfillService`   — W3.4 worker logic; paginates last 30 days into `RawMessage` rows.
+ * Account-management services (`EmailAccountsService` + `GoogleOAuthService`) come from
+ * `EmailAccountsModule` — those are shared across providers and live there to avoid
+ * a circular dep with `MicrosoftModule`.
  *
  * Member-or-owner write routes use `@MemberWrite()` (entitlement-gated). Status + messages
  * reads use `TenantMemberGuard` alone. EXTERNAL is rejected at the guard layer.
  *
  * `GmailBackfillService` is exported so the InngestModule's `GmailBackfillFunction`
- * wrapper can inject it. The function itself is registered in InngestModule, not here.
+ * wrapper can inject it.
  */
 @Module({
-	imports: [AuthModule],
+	imports: [AuthModule, EmailAccountsModule],
 	controllers: [GmailController],
-	providers: [GoogleOAuthService, GmailApiService, EmailAccountsService, GmailBackfillService],
-	exports: [EmailAccountsService, GmailApiService, GmailBackfillService]
+	providers: [GmailApiService, GmailBackfillService],
+	exports: [GmailApiService, GmailBackfillService]
 })
 export class GmailModule {}

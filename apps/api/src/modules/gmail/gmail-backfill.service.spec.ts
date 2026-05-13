@@ -1,5 +1,5 @@
 import { EmailProvider } from '@/generated/prisma/enums';
-import { EmailAccountsService } from '@/modules/gmail/email-accounts.service';
+import { EmailAccountsService } from '@/modules/email-accounts/email-accounts.service';
 import { GmailApiService } from '@/modules/gmail/gmail-api.service';
 import { GmailBackfillService } from '@/modules/gmail/gmail-backfill.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';

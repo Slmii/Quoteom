@@ -84,6 +84,8 @@ export const trialSeatLimitReached = (cap: number) =>
 // ────────────────────────────────────────────────────────────────────────────
 export const GOOGLE_OAUTH_NOT_CONFIGURED =
 	'Google OAuth is not configured (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET).';
+export const MICROSOFT_OAUTH_NOT_CONFIGURED =
+	'Microsoft OAuth is not configured (set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET).';
 export const OAUTH_STATE_INVALID = 'OAuth state mismatch — possible CSRF, restart the connect flow.';
 export const OAUTH_CODE_MISSING = 'OAuth callback is missing the authorization code.';
 export const OAUTH_TOKEN_EXCHANGE_FAILED = 'Failed to exchange OAuth code for tokens.';
