@@ -281,15 +281,22 @@ Smoke flow (4 terminals: `pnpm dev`, `pnpm --filter @quoteom/api inngest`, `ngro
 
 Renewal cron is verifiable without waiting a week: in `db:studio` backdate `watchExpiresAt` to yesterday → in the Inngest UI click **Invoke** on `gmail-watch-renewal` → output reports `{ scanned: 1, renewed: 1, ... }` and `watchExpiresAt` jumps back to ~7 days out. Same path also verifies the orphan-row fix: NULL out `watchExpiresAt` (keep `historyId`) and Invoke again — orphan still gets picked up.
 
-Common Phase C gotchas:
+Common Phase C gotchas (in order of frequency):
 
 | Symptom | Fix |
 |---|---|
 | `users.watch` returns 403 / `Insufficient Permission` | `gmail-api-push@system.gserviceaccount.com` missing Publisher on topic (Step 1). |
-| Webhook 401 on every push | `GOOGLE_PUBSUB_AUDIENCE` doesn't match the subscription's audience exactly, OR `GOOGLE_PUBSUB_SERVICE_ACCOUNT` doesn't match the actual signer in the subscription's Auth section. The `gmail.webhook.jwt_invalid` action log says which check failed. |
-| Webhook 503 | One of the two new env vars is empty — by design (refuse to accept pushes when verification isn't configured). |
+| OAuth callback redirects to `localhost:3000` | `WEB_ORIGIN` in `apps/api/.env` still set to `http://localhost:3000`. Auth.js's `redirect` callback rewrites every post-signin URL to this value. **Set `WEB_ORIGIN=https://<your-ngrok>` for the smoke**, restart API, then put it back when done. |
+| Sign-in completes but home page bounces to `/sign-in` (and `Failed to load organizations (401)`) | `AUTH_URL=http://localhost:3000/api/auth` set in `apps/api/.env`. This env var **overrides** Auth.js's header-based URL detection — `@auth/express`'s `getSession` builds an HTTP URL → uses non-secure cookie name → can't find the `__Secure-`-prefixed cookie that ExpressAuth set. **Unset `AUTH_URL` for the smoke** (and for dev in general — `trustHost: true` handles URL detection from headers). |
+| Webhook 401 on every push | `GOOGLE_PUBSUB_AUDIENCE` doesn't match the subscription's audience exactly, OR `GOOGLE_PUBSUB_SERVICE_ACCOUNT` doesn't match the actual signer in the subscription's Auth section. The `gmail.webhook.jwt_invalid` action log includes the JWT's actual `email` claim — copy-paste that into env. |
+| Webhook 503 | One of `GOOGLE_PUBSUB_AUDIENCE` / `GOOGLE_PUBSUB_SERVICE_ACCOUNT` is empty — by design (refuse to accept pushes when verification isn't configured). |
+| Vite responds 403 "host not allowed" | ngrok subdomain not in `apps/web/vite.config.ts` `server.allowedHosts`. The `.ngrok-free.dev` wildcard already in main covers the free tier; add `.ngrok.app` etc. if you use a different TLD. |
 | Push arrives but `gmail.webhook.unknown_mailbox` 204 | `EmailAccount.email` doesn't match Gmail's primary alias. Check `db:studio`. |
 | OAuth callback hits `localhost:3000` instead of the tunnel | You signed in via localhost; restart from the ngrok URL. |
 | Push body has empty `message.data` | Gmail occasionally fires heartbeat-style pushes with no data. Webhook returns 400 → Pub/Sub retries → eventually drops. Not blocking but noisy. |
+
+**Env hygiene after smoke:** revert `WEB_ORIGIN` to `http://localhost:3000` if you want normal-localhost dev to keep working. `GOOGLE_PUBSUB_TOPIC` / `AUDIENCE` / `SERVICE_ACCOUNT` are inert during localhost dev (the watch service only fires when you connect through the configured topic, which requires the ngrok flow) — fine to leave set.
+
+**`AUTH_URL` recommendation:** leave unset in dev. `trustHost: true` in `authConfig` makes Auth.js use the request Host header for URL detection, which works for both localhost AND ngrok without env churn. Only set `AUTH_URL` in production deploys where you want to pin the canonical URL against Host-header spoofing.
 
 See `TEST_CASES.md` → EMAIL-PUSH-01..06 for the full test catalog.

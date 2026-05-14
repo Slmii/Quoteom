@@ -20,7 +20,8 @@ export const envSchema = z.object({
 	// Auth.js (consumed at module-init time by auth.config.ts; ConfigService can't reach
 	// that file, but we still validate the values here so a typo in .env fails fast.)
 	AUTH_SECRET: z.string().min(32),
-	AUTH_URL: z.url(),
+	// Only required on PROD
+	AUTH_URL: z.url().optional(),
 	AUTH_TRUST_HOST: z.coerce.boolean().default(true),
 
 	// Encryption key for OAuth tokens stored on Account rows. 32 bytes hex-encoded.

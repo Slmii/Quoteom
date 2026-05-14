@@ -12,6 +12,13 @@ export default defineConfig(({ mode }) => {
 	return {
 		server: {
 			port: 3000,
+			// Allow Vite to serve requests proxied through ngrok during
+			// Gmail-push smoke testing. The leading-dot pattern matches any subdomain
+			// (each dev gets their own reserved hostname like `<name>.ngrok-free.dev`).
+			// Vite still binds to localhost only by default — this just relaxes the
+			// Host-header allowlist for incoming requests. No prod implication; built
+			// bundles are served by DO App Platform, not this dev server.
+			allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app', '.ngrok.app'],
 			// Dev proxy: anything under /api gets forwarded to the NestJS API. From the browser's
 			// perspective every request is same-origin (localhost:3000), so Auth.js cookies are set
 			// and sent without SameSite gymnastics.

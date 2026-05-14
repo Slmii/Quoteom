@@ -774,18 +774,56 @@ The W3.5 staged execution plan (`~/.claude/plans/toasty-herding-giraffe.md`) spl
 - [ ] **Expect** API responds 204 (Pub/Sub stops retrying).
 - [ ] DB check: `Log` row `gmail.webhook.unknown_mailbox` at WARN level, no `gmail/history.changed` event fired in the Inngest dev UI.
 
-### EMAIL-PUSH-06: Phase C — end-to-end smoke via ngrok (deferred until GCP setup)
-The ngrok-based smoke story. Setup steps (run once per dev machine):
-1. Create Pub/Sub topic `projects/<your-project>/topics/quoteom-gmail` in GCP.
-2. Grant `gmail-api-push@system.gserviceaccount.com` the `roles/pubsub.publisher` role on the topic.
-3. Register a push subscription pointing at `https://<your-ngrok-domain>/api/email/gmail/webhook` with audience `https://<your-ngrok-domain>/api/email/gmail/webhook` and a service account email; set `GOOGLE_PUBSUB_AUDIENCE` / `GOOGLE_PUBSUB_SERVICE_ACCOUNT` to match.
-4. `GOOGLE_PUBSUB_TOPIC=projects/<your-project>/topics/quoteom-gmail` in `apps/api/.env`.
-5. `pnpm dev` + `ngrok http 3000 --domain=<your-reserved-domain>`.
+### EMAIL-PUSH-06: Phase C — end-to-end smoke via ngrok
+The ngrok-based smoke story. **First passed on 2026-05-14.** Setup steps (run once per dev machine):
 
-- [ ] Connect Gmail. Backfill runs. The `start-watch` step succeeds — DB `watchExpiresAt` is ~7 days in the future.
+1. **Create Pub/Sub topic** `projects/<your-project>/topics/quoteom-gmail-dev` in GCP.
+2. **Grant `gmail-api-push@system.gserviceaccount.com`** the `roles/pubsub.publisher` role on the topic (Permissions tab on the topic). Most common 403 source if missed.
+3. **Create a service account** (IAM & Admin → Service Accounts) with the role `roles/iam.serviceAccountTokenCreator`. This is the account Pub/Sub impersonates to sign JWTs.
+4. **Register a push subscription** pointing at `https://<your-ngrok-domain>/api/email/gmail/webhook`:
+   - Delivery type: Push
+   - Enable authentication: ON
+   - Service account: the one from step 3
+   - Audience: same as the endpoint URL
+5. **Add ngrok URLs to the Google OAuth client's Authorized redirect URIs:**
+   - `https://<your-ngrok-domain>/api/email/gmail/callback`
+   - `https://<your-ngrok-domain>/api/auth/callback/google`
+6. **Env vars** in `apps/api/.env`:
+   ```
+   GOOGLE_PUBSUB_TOPIC=projects/<your-project>/topics/quoteom-gmail-dev
+   GOOGLE_PUBSUB_AUDIENCE=https://<your-ngrok-domain>/api/email/gmail/webhook
+   GOOGLE_PUBSUB_SERVICE_ACCOUNT=<exact email from step 3>
+   WEB_ORIGIN=https://<your-ngrok-domain>      # temporary — set back to localhost after smoke
+   ```
+   **Also: UNSET `AUTH_URL`** if it's currently set to a localhost value (see gotcha table below). With `trustHost: true`, Auth.js will pick up the ngrok host from request headers.
+7. **Add ngrok host to `apps/web/vite.config.ts`** under `server.allowedHosts` — already done in the codebase (`.ngrok-free.dev` wildcard covers it).
+8. **Start everything:** `pnpm dev` + `pnpm --filter @quoteom/api inngest` + `ngrok http 3000 --domain=<your-reserved-domain>`.
+
+Smoke steps:
+- [ ] Sign in via the **ngrok URL** (not localhost — OAuth callbacks must land on the tunnel for the session cookie to scope correctly).
+- [ ] Connect Gmail at `/settings/email`. Inngest UI's `gmail-backfill` run shows two steps: `backfill` ✓ then `start-watch` ✓. DB `watchExpiresAt` is ~7 days in the future.
 - [ ] From a different account, send a test email to the connected mailbox.
-- [ ] Within 60s, the `gmail-delta-sync` Inngest function fires. DB has a new `RawMessage` row for that test email; `EmailAccount.historyId` advanced.
-- [ ] Log table shows `gmail.webhook.received` followed by `email.delta_sync.completed`.
+- [ ] Within 30s: ngrok inspector (http://localhost:4040) shows POST to `/api/email/gmail/webhook` with `Authorization: Bearer eyJ...`, response 204.
+- [ ] `gmail-delta-sync` Inngest run fires (~2s debounce after the push). Step output reports `messagesInserted: 1`.
+- [ ] `RawMessage` table has the new row; `EmailAccount.historyId` advanced.
+- [ ] `Log` table has rows for `gmail.webhook.received` then `email.delta_sync.completed`.
+
+Bonus checks (validate self-healing):
+- [ ] **Renewal cron works.** In `db:studio`, backdate `EmailAccount.watchExpiresAt` to yesterday. In Inngest UI invoke `gmail-watch-renewal` (empty payload). Output: `{ scanned: 1, renewed: 1, skipped: 0, failed: 0 }`. `watchExpiresAt` returns to ~7 days out.
+- [ ] **Orphan-row pickup works (audit round 2 fix).** Set `watchExpiresAt` to NULL (keep `historyId` set). Invoke `gmail-watch-renewal` again. Still `renewed: 1` — proves the OR-clause in the cron's findMany covers half-connected mailboxes.
+
+#### Common Phase C gotchas (in order of how often they bite)
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| **`users.watch` returns 403 at backfill end** | Step 2 missed: `gmail-api-push@system.gserviceaccount.com` doesn't have Publisher on the topic. | Add the role on the topic's Permissions tab. |
+| **OAuth callback redirects you to localhost** | `WEB_ORIGIN` env still set to `http://localhost:3000`. Auth.js's `redirect` callback rewrites every post-signin URL to that value. | Set `WEB_ORIGIN=https://<your-ngrok>` for the smoke. Restart API. |
+| **Sign-in succeeds but home page bounces to `/sign-in`; `Failed to load organizations (401)`** | `AUTH_URL=http://localhost:3000/api/auth` overrides Auth.js's header-based URL detection. `@auth/express`'s `getSession` builds an HTTP URL → uses non-secure cookie name → doesn't find the `__Secure-` cookie that ExpressAuth set. | **Unset `AUTH_URL`** for the smoke. `trustHost: true` in authConfig handles URL detection from request headers correctly. |
+| **Webhook 401 every push** | `GOOGLE_PUBSUB_SERVICE_ACCOUNT` env doesn't match the actual service account configured on the push subscription. | The API logs `gmail.webhook.jwt_invalid` with the JWT's actual `email` claim — copy that exact value into env. Restart API. |
+| **Webhook 503** | One of `GOOGLE_PUBSUB_AUDIENCE` / `GOOGLE_PUBSUB_SERVICE_ACCOUNT` is empty. By design — we refuse pushes when verification isn't configured. | Set both. Restart API. |
+| **Webhook 204 + `gmail.webhook.unknown_mailbox` action log** | `EmailAccount.email` doesn't match Gmail's `emailAddress` in the push (e.g. mailbox alias mismatch). | Check `db:studio` → the email column on EmailAccount. |
+| **OAuth callback hits `localhost:3000` instead of tunnel** | You started the flow from localhost, not the ngrok URL. | Restart at `https://<ngrok>/sign-in`. |
+| **Vite responds 403 with "host not allowed"** | ngrok subdomain not in `vite.config.ts` allowedHosts. | Already fixed in main with `.ngrok-free.dev` wildcard. If using a different ngrok TLD add it. |
 
 ---
 
