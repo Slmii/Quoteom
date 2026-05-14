@@ -39,6 +39,18 @@ interface CreateInvitationInput {
 	role?: MembershipRole;
 }
 
+// Internal shape returned by the tx — superset of the public DTO with audit-only
+// fields the post-tx logAction call needs. Kept private to the function so the
+// public DTO stays free of leaking properties.
+interface AcceptTxResult {
+	userId: string;
+	email: string;
+	organizationId: string;
+	organizationName: string;
+	invitationId: string;
+	invitationRole: MembershipRole;
+}
+
 @Injectable()
 export class InvitationsService {
 	constructor(
@@ -163,12 +175,12 @@ export class InvitationsService {
 	}
 
 	async accept(token: string): Promise<AcceptInvitationResponseDto> {
-		// Lookup + expiry/accepted checks are done inside the transaction so two concurrent
-		// `accept()` calls on the same token can't both pass — the second one's re-read
-		// inside the tx sees `acceptedAt` already set (or `expiresAt` past if the first
-		// caller's tx happened to nudge across the second boundary). Without this, two
-		// races at the exact expiry second could both complete.
-		const result = await this.prisma.$transaction(async tx => {
+		// Lookup + expiry/accepted checks live inside the tx so a concurrent accept on the
+		// same token can't both pass. The final invitation update uses a conditional
+		// `updateMany` (acceptedAt: null) so the gate is atomic at the DB layer regardless
+		// of READ COMMITTED isolation — only one tx can claim the row; the loser gets
+		// count=0 and aborts cleanly.
+		const txResult = await this.prisma.$transaction(async (tx): Promise<AcceptTxResult> => {
 			const invitation = await tx.invitation.findUnique({
 				where: { token },
 				include: { organization: true }
@@ -228,45 +240,54 @@ export class InvitationsService {
 				}
 			});
 
-			await tx.invitation.update({
-				where: { id: invitation.id },
+			// Atomic claim: `updateMany` with `acceptedAt: null` in the WHERE clause means
+			// only the first concurrent caller wins. The loser sees count=0 and we throw,
+			// aborting the whole tx (rolling back membership upsert + any user create).
+			// Without this, two concurrent accepts could both pass the line-181 null check
+			// (READ COMMITTED isolation) and both succeed at a non-atomic final update.
+			const { count } = await tx.invitation.updateMany({
+				where: { id: invitation.id, acceptedAt: null },
 				data: { acceptedAt: new Date() }
 			});
+			if (count === 0) {
+				throw new ConflictException(INVITATION_ALREADY_ACCEPTED);
+			}
 
 			return {
 				userId: user.id,
 				email: normalizedEmail,
 				organizationId: invitation.organizationId,
 				organizationName: invitation.organization.name,
-				// Internal audit-only fields not on the public DTO — stripped before return.
-				_invitationId: invitation.id,
-				_invitationRole: invitation.role
+				invitationId: invitation.id,
+				invitationRole: invitation.role
 			};
 		});
 
 		// Reconcile Stripe's billed quantity with the new membership count. Best-effort: if
 		// the API is unreachable, the invitation already committed — we log and move on.
 		// A subsequent sync (next invite, or a webhook-driven re-sync) will fix the drift.
-		await this.billing.syncSeatCount(result.organizationId);
+		await this.billing.syncSeatCount(txResult.organizationId);
 
 		this.logService.logAction({
 			action: 'invitation.accepted',
-			message: `${result.email} joined ${result.organizationName}`,
+			message: `${txResult.email} joined ${txResult.organizationName}`,
 			metadata: {
-				organizationId: result.organizationId,
-				invitationId: result._invitationId,
-				userId: result.userId,
-				inviteeEmail: result.email,
-				role: result._invitationRole
+				organizationId: txResult.organizationId,
+				invitationId: txResult.invitationId,
+				userId: txResult.userId,
+				inviteeEmail: txResult.email,
+				role: txResult.invitationRole
 			},
 			context: 'InvitationsService'
 		});
 
+		// Project only public DTO fields — `invitationId` / `invitationRole` were audit-
+		// only and stay out of the response.
 		return {
-			userId: result.userId,
-			email: result.email,
-			organizationId: result.organizationId,
-			organizationName: result.organizationName
+			userId: txResult.userId,
+			email: txResult.email,
+			organizationId: txResult.organizationId,
+			organizationName: txResult.organizationName
 		};
 	}
 

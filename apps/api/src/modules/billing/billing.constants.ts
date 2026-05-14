@@ -73,11 +73,16 @@ export const TRIAL_SEAT_LIMIT_CODE = 'trial_seat_limit';
  *
  * `past_due` is included by user policy: invites stay open during dunning so the org
  * doesn't lose the ability to add a teammate while their card is being retried.
+ *
+ * `paused` is deliberately EXCLUDED: Stripe rejects `subscriptions.update` on paused
+ * subs with `subscription_status_invalid`. The seat-sync try/catch in BillingService
+ * would swallow that error but spend a round-trip + emit a noisy ERROR action log on
+ * every invitation accept while paused. Skipping cleanly here avoids the noise; the
+ * next non-paused state transition (resume → active) will sync seats then.
  */
 export const SEAT_SYNC_STATUSES: ReadonlyArray<string> = [
 	'trialing',
 	'active',
 	'past_due',
-	'paused',
 	'incomplete'
 ];

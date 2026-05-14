@@ -11,7 +11,7 @@ import { inngest } from '@/modules/inngest/inngest.client';
 import { InngestEvents } from '@/modules/inngest/inngest.constants';
 import { LogService } from '@/modules/logger/log.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 
 /**
  * Refresh tokens that are within this window of expiring are refreshed proactively
@@ -118,7 +118,7 @@ export class EmailAccountsService {
 			: (existing?.refreshToken ?? null);
 
 		if (!refreshTokenCipher) {
-			throw new NotFoundException(NO_REFRESH_TOKEN_AVAILABLE);
+			throw new InternalServerErrorException(NO_REFRESH_TOKEN_AVAILABLE);
 		}
 
 		const data = {

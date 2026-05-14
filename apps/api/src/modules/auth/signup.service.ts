@@ -81,7 +81,7 @@ export class SignupService {
 			// findFirst check. The loser's `tx.user.create` trips the User.email unique
 			// constraint → Prisma P2002. Without this catch the user sees a 500 with a
 			// raw Prisma error message instead of the clean 409 ConflictException.
-			if (isUniqueConstraintError(error)) {
+			if (isUserEmailUniqueConstraintError(error)) {
 				this.logService.logAction({
 					action: 'signup.rejected.duplicate_email',
 					message: `Signup race lost — duplicate email ${email} (P2002)`,
@@ -111,10 +111,25 @@ export class SignupService {
 }
 
 /**
- * Duck-typed check for Prisma's P2002 (Unique constraint failed). Avoids importing
- * `Prisma.PrismaClientKnownRequestError` to keep the import surface aligned with the
- * `isResourceMissingError` pattern used by `BillingService` for Stripe's `resource_missing`.
+ * Duck-typed check for Prisma's P2002 (Unique constraint failed) specifically on the
+ * `User.email` column. Avoids importing `Prisma.PrismaClientKnownRequestError` to keep
+ * the import surface aligned with the `isResourceMissingError` pattern used by
+ * `BillingService` for Stripe's `resource_missing`.
+ *
+ * Why the `target` check: today `User.email` is the only unique column the signup tx can
+ * trip. But a future schema change (e.g. adding a unique on `Organization.name`) would
+ * silently get mis-translated to `ACCOUNT_ALREADY_EXISTS` — wrong user-facing error.
+ * Pin to the email target so any other unique violation propagates as a generic 500
+ * instead of a misleading 409.
  */
-function isUniqueConstraintError(error: unknown): boolean {
-	return error instanceof Error && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+function isUserEmailUniqueConstraintError(error: unknown): boolean {
+	if (!(error instanceof Error) || !('code' in error)) {
+		return false;
+	}
+	const typed = error as { code?: unknown; meta?: { target?: unknown } };
+	if (typed.code !== 'P2002') {
+		return false;
+	}
+	const target = typed.meta?.target;
+	return Array.isArray(target) && target.includes('email');
 }
