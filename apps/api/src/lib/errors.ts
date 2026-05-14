@@ -16,6 +16,13 @@ export const ORGANIZATION_NOT_FOUND = 'Organization not found';
 export const NO_ACTIVE_ORGANIZATION =
 	'No active organization. You must be a member of an organization to access this route.';
 export const MEMBERSHIP_NOT_FOUND = 'Membership not found in the active organization';
+// User-facing — surfaced when an OWNER attempts to remove their own membership. Ownership
+// transfer (if we ever build it) is a separate flow; deleting the owner would orphan the org.
+export const CANNOT_REMOVE_SELF = 'You cannot remove yourself. Ask another owner, or contact support to transfer ownership.';
+// User-facing — surfaced when an OWNER attempts to remove another OWNER. Today there's only
+// one owner per org, so this is mostly defensive; if multi-owner ever lands, surface
+// "transfer ownership first" as a follow-up.
+export const CANNOT_REMOVE_OWNER = 'Cannot remove the organization owner.';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Invitations (User-facing)

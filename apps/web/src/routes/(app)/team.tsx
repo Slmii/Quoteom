@@ -6,6 +6,7 @@ import {
 	membershipsQueryOptions,
 	myMembershipQueryOptions,
 	useCreateInvitation,
+	useRemoveMember,
 	useRevokeInvitation,
 	type MembershipRole
 } from '@/lib/queries/team.queries';
@@ -57,6 +58,7 @@ function TeamPage() {
 	const navigate = useNavigate();
 	const createInvitation = useCreateInvitation();
 	const revokeInvitation = useRevokeInvitation();
+	const removeMember = useRemoveMember();
 
 	const [email, setEmail] = useState('');
 	const [role, setRole] = useState<MembershipRole>('MEMBER');
@@ -109,16 +111,51 @@ function TeamPage() {
 					Members
 				</Typography>
 				<List dense disablePadding sx={{ mb: 2 }}>
-					{memberships.map(m => (
-						<ListItem key={m.id} disableGutters>
-							<ListItemText
-								primary={m.user.name ?? m.user.email}
-								secondary={m.user.name ? m.user.email : null}
-							/>
-							<Chip size='small' label={m.role} variant='outlined' />
-						</ListItem>
-					))}
+					{memberships.map(m => {
+						// Hide the remove button on the owner's own row (you can't remove yourself,
+						// the API would 400) AND on any OWNER row (defensive — server rejects with
+						// 409 even if a non-OWNER's owner row was somehow shown to us).
+						const canRemove = isOwner && m.role !== 'OWNER' && m.user.id !== me.user.id;
+						return (
+							<ListItem
+								key={m.id}
+								disableGutters
+								secondaryAction={
+									canRemove ? (
+										<IconButton
+											edge='end'
+											size='small'
+											aria-label={`Remove ${m.user.email}`}
+											disabled={removeMember.isPending}
+											onClick={() => {
+												if (window.confirm(`Remove ${m.user.email} from the organization?`)) {
+													removeMember.mutate(m.user.id);
+												}
+											}}
+										>
+											×
+										</IconButton>
+									) : undefined
+								}
+							>
+								<ListItemText
+									primary={m.user.name ?? m.user.email}
+									secondary={m.user.name ? m.user.email : null}
+									sx={{ mr: canRemove ? 6 : 2 }}
+								/>
+								<Chip size='small' label={m.role} variant='outlined' sx={{ mr: canRemove ? 4 : 0 }} />
+							</ListItem>
+						);
+					})}
 				</List>
+
+				{removeMember.error && (
+					<Alert severity='error' sx={{ mb: 2 }}>
+						{removeMember.error instanceof Error
+							? removeMember.error.message
+							: 'Could not remove member.'}
+					</Alert>
+				)}
 
 				{invitations.length > 0 && (
 					<>

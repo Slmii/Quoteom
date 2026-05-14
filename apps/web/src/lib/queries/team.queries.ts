@@ -101,3 +101,21 @@ export function useRevokeInvitation() {
 		}
 	});
 }
+
+/**
+ * Remove a member from the active org. Owner-only on the server; the UI hides the button
+ * for non-owners, but a direct call would still 403.
+ *
+ * Invalidates memberships (the row disappears) AND billing status (seat count decreases →
+ * different overage math) on success.
+ */
+export function useRemoveMember() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (userId: string) => api<void>(`/api/me/memberships/${userId}`, { method: 'DELETE' }),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: TeamKeys.memberships });
+			void queryClient.invalidateQueries({ queryKey: BillingKeys.status });
+		}
+	});
+}
