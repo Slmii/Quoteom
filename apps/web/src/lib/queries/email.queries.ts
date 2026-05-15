@@ -5,16 +5,8 @@ import {
 	getMicrosoftStatusServer
 } from '@/lib/api/email.api';
 import { api } from '@/lib/api/client';
+import type { OkResponse } from '@quoteom/shared';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
-export type {
-	GmailMessage,
-	GmailMessages,
-	GmailStatus,
-	MailboxStatus,
-	MicrosoftMessage,
-	MicrosoftMessages,
-	MicrosoftStatus
-} from '@/lib/api/email.api';
 
 export const EmailKeys = {
 	gmailStatus: ['email', 'gmail', 'status'] as const,
@@ -50,7 +42,7 @@ export const microsoftMessagesQueryOptions = queryOptions({
 export function useDisconnectGmail() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: () => api<{ ok: boolean }>('/api/email/gmail/disconnect', { method: 'POST' }),
+		mutationFn: () => api<OkResponse>('/api/email/gmail/disconnect', { method: 'POST' }),
 		onSettled: () => {
 			void queryClient.invalidateQueries({ queryKey: EmailKeys.gmailStatus });
 			void queryClient.invalidateQueries({ queryKey: EmailKeys.gmailMessages });
@@ -61,7 +53,7 @@ export function useDisconnectGmail() {
 export function useDisconnectMicrosoft() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: () => api<{ ok: boolean }>('/api/email/microsoft/disconnect', { method: 'POST' }),
+		mutationFn: () => api<OkResponse>('/api/email/microsoft/disconnect', { method: 'POST' }),
 		onSettled: () => {
 			void queryClient.invalidateQueries({ queryKey: EmailKeys.microsoftStatus });
 			void queryClient.invalidateQueries({ queryKey: EmailKeys.microsoftMessages });

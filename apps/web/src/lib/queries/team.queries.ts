@@ -3,22 +3,12 @@ import {
 	getInvitationsServer,
 	getMembershipsServer,
 	getMyMembershipServer,
-	getMyOrganizationsServer,
-	type Invitation,
-	type Membership,
-	type MembershipRole
+	getMyOrganizationsServer
 } from '@/lib/api/team.api';
 import { BillingKeys } from '@/lib/queries/billing.queries';
+import type { CreateInvitationInput, Invitation, Membership } from '@quoteom/shared';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-
-export type {
-	Invitation,
-	Membership,
-	MembershipOrganization,
-	MembershipRole,
-	MembershipUser
-} from '@/lib/api/team.api';
 
 const TeamKeys = {
 	memberships: ['team', 'memberships'] as const,
@@ -73,15 +63,10 @@ export const invitationsQueryOptions = queryOptions({
 	staleTime: 30_000
 });
 
-interface CreateInvitationBody {
-	email: string;
-	role?: MembershipRole;
-}
-
 export function useCreateInvitation() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (body: CreateInvitationBody) => api<Invitation>('/api/invitations', { method: 'POST', body }),
+		mutationFn: (body: CreateInvitationInput) => api<Invitation>('/api/invitations', { method: 'POST', body }),
 		onSuccess: () => {
 			void queryClient.invalidateQueries({ queryKey: TeamKeys.invitations });
 			// Seat counts on the billing status panel may change too — invalidate so

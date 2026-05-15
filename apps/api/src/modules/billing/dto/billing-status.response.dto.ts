@@ -1,21 +1,6 @@
-/**
- * Discriminator the UI switches on. Values mirror Stripe's Subscription.status enum
- * plus one non-Stripe state for orgs that have never reached Checkout:
- *  - `none`: no Subscription row yet. Writes are gated; user must Checkout to start
- *    the 14-day Stripe-managed trial.
- */
-export type BillingState =
-	| 'none'
-	| 'trialing'
-	| 'active'
-	| 'past_due'
-	| 'unpaid'
-	| 'canceled'
-	| 'paused'
-	| 'incomplete'
-	| 'incomplete_expired';
+import type { BillingSeats, BillingState, BillingStatus } from '@quoteom/shared';
 
-export class BillingSeatsDto {
+export class BillingSeatsDto implements BillingSeats {
 	/** Active memberships on the org right now. */
 	used!: number;
 	/** Seats included in the base price (graduated tier 1). */
@@ -24,7 +9,7 @@ export class BillingSeatsDto {
 	overagePerSeatCents!: number;
 }
 
-export class BillingStatusResponseDto {
+export class BillingStatusResponseDto implements BillingStatus {
 	state!: BillingState;
 
 	/**

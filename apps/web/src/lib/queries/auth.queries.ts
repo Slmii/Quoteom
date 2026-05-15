@@ -1,5 +1,6 @@
 import { getSessionServer } from '@/lib/api/auth.api';
 import { api, postForm } from '@/lib/api/client';
+import type { OAuthProviderId } from '@quoteom/shared';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 
@@ -31,8 +32,6 @@ export function useSignInWithEmail() {
 		}
 	});
 }
-
-export type OAuthProviderId = 'google' | 'microsoft-entra-id';
 
 export async function signInWithOAuth(providerId: OAuthProviderId): Promise<void> {
 	const csrfToken = await getCsrfToken();

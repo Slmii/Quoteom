@@ -12,7 +12,8 @@ import {
 	SEATS_INCLUDED,
 	SEAT_SYNC_STATUSES
 } from '@/modules/billing/billing.constants';
-import type { BillingState, BillingStatusResponseDto } from '@/modules/billing/dto/billing-status.response.dto';
+import type { BillingState } from '@quoteom/shared';
+import type { BillingStatusResponseDto } from '@/modules/billing/dto/billing-status.response.dto';
 import { LogService } from '@/modules/logger/log.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { ConflictException, Injectable, InternalServerErrorException } from '@nestjs/common';

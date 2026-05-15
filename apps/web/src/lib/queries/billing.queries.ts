@@ -1,16 +1,7 @@
 import { getBillingStatusServer } from '@/lib/api/billing.api';
 import { api } from '@/lib/api/client';
+import type { BillingSyncResponse, CheckoutSessionResponse, PortalSessionResponse } from '@quoteom/shared';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
-export type { BillingSeats, BillingState, BillingStatus } from '@/lib/api/billing.api';
-
-interface CheckoutSessionResponse {
-	url: string;
-}
-
-interface BillingSyncResponse {
-	ok: boolean;
-	status: string | null;
-}
 
 export const BillingKeys = {
 	status: ['billing', 'status'] as const
@@ -43,7 +34,7 @@ export function useStartCheckout() {
 export function useOpenPortal() {
 	return useMutation({
 		mutationFn: async () => {
-			const { url } = await api<CheckoutSessionResponse>('/api/billing/portal-session', {
+			const { url } = await api<PortalSessionResponse>('/api/billing/portal-session', {
 				method: 'POST'
 			});
 			window.location.href = url;

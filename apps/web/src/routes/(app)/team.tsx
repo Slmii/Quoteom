@@ -1,15 +1,14 @@
 import { WrapperApiError } from '@/lib/api/client';
 import { billingStatusQueryOptions } from '@/lib/queries/billing.queries';
-import type { BillingState } from '@/lib/queries/billing.queries';
 import {
 	invitationsQueryOptions,
 	membershipsQueryOptions,
 	myMembershipQueryOptions,
 	useCreateInvitation,
 	useRemoveMember,
-	useRevokeInvitation,
-	type MembershipRole
+	useRevokeInvitation
 } from '@/lib/queries/team.queries';
+import type { BillingState, MembershipRole } from '@quoteom/shared';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';

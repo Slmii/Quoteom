@@ -1,31 +1,6 @@
 import { serverFetch } from '@/lib/api/server-fetch';
+import type { BillingStatus } from '@quoteom/shared';
 import { createServerFn } from '@tanstack/react-start';
-
-export type BillingState =
-	| 'none'
-	| 'trialing'
-	| 'active'
-	| 'past_due'
-	| 'unpaid'
-	| 'canceled'
-	| 'paused'
-	| 'incomplete'
-	| 'incomplete_expired';
-
-export interface BillingSeats {
-	used: number;
-	included: number;
-	overagePerSeatCents: number;
-}
-
-export interface BillingStatus {
-	state: BillingState;
-	currentPeriodEnd: string | null;
-	cancelAtPeriodEnd: boolean;
-	paymentMethodBrand: string | null;
-	paymentMethodLast4: string | null;
-	seats: BillingSeats;
-}
 
 /**
  * Isomorphic billing-status fetch. Same code path SSR and client:

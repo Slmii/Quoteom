@@ -1,4 +1,6 @@
-export class MicrosoftStatusResponseDto {
+import type { MailboxStatus } from '@quoteom/shared';
+
+export class MicrosoftStatusResponseDto implements MailboxStatus {
 	connected!: boolean;
 	/** Mailbox address when connected; `null` otherwise. */
 	email!: string | null;

@@ -1,3 +1,4 @@
+import type { CreateInvitationInput } from '@quoteom/shared';
 import { MembershipRole } from '@/generated/prisma/client';
 import { OWNER_ROLE_NOT_INVITABLE } from '@/lib/errors';
 import { IsEmail, IsEnum, IsIn, IsOptional } from 'class-validator';
@@ -8,7 +9,7 @@ import { IsEmail, IsEnum, IsIn, IsOptional } from 'class-validator';
  */
 const INVITABLE_ROLES: ReadonlyArray<MembershipRole> = [MembershipRole.MEMBER, MembershipRole.EXTERNAL];
 
-export class CreateInvitationDto {
+export class CreateInvitationDto implements CreateInvitationInput {
 	@IsEmail()
 	email!: string;
 

@@ -1,4 +1,4 @@
-import { billingStatusQueryOptions, type BillingState } from '@/lib/queries/billing.queries';
+import { billingStatusQueryOptions } from '@/lib/queries/billing.queries';
 import {
 	EmailKeys,
 	gmailMessagesQueryOptions,
@@ -6,11 +6,9 @@ import {
 	microsoftMessagesQueryOptions,
 	microsoftStatusQueryOptions,
 	useDisconnectGmail,
-	useDisconnectMicrosoft,
-	type GmailMessage,
-	type MailboxStatus,
-	type MicrosoftMessage
+	useDisconnectMicrosoft
 } from '@/lib/queries/email.queries';
+import type { BillingState, GmailMessage, MailboxStatus, MicrosoftMessage } from '@quoteom/shared';
 import { myMembershipQueryOptions } from '@/lib/queries/team.queries';
 import { EmailSettingsSearchSchema } from '@/lib/schemas/email.schema';
 import Alert from '@mui/material/Alert';

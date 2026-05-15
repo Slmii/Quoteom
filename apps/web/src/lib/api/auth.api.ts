@@ -1,15 +1,6 @@
 import { serverFetch } from '@/lib/api/server-fetch';
+import type { Session } from '@quoteom/shared';
 import { createServerFn } from '@tanstack/react-start';
-
-export interface Session {
-	user?: {
-		id: string;
-		email?: string | null;
-		name?: string | null;
-		image?: string | null;
-	};
-	expires: string;
-}
 
 export const getSessionServer = createServerFn({ method: 'GET' }).handler(async () => {
 	const response = await serverFetch('/api/auth/session');

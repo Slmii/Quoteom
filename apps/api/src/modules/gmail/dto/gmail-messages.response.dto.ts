@@ -1,4 +1,6 @@
-export class GmailMessageDto {
+import type { GmailMessage, GmailMessages } from '@quoteom/shared';
+
+export class GmailMessageDto implements GmailMessage {
 	id!: string;
 	threadId!: string;
 	/** Provider's `internalDate` rendered as ISO. */
@@ -8,6 +10,6 @@ export class GmailMessageDto {
 	from!: string | null;
 }
 
-export class GmailMessagesResponseDto {
+export class GmailMessagesResponseDto implements GmailMessages {
 	messages!: GmailMessageDto[];
 }

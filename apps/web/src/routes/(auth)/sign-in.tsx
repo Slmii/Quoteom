@@ -1,4 +1,5 @@
-import { type OAuthProviderId, signInWithOAuth, useSignInWithEmail } from '@/lib/queries/auth.queries';
+import { signInWithOAuth, useSignInWithEmail } from '@/lib/queries/auth.queries';
+import type { OAuthProviderId } from '@quoteom/shared';
 import { type SignInForm, SignInSchema } from '@/lib/schemas/auth.schema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Alert from '@mui/material/Alert';

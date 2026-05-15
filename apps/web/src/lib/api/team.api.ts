@@ -1,37 +1,6 @@
 import { serverFetch } from '@/lib/api/server-fetch';
+import type { Invitation, Membership } from '@quoteom/shared';
 import { createServerFn } from '@tanstack/react-start';
-
-export type MembershipRole = 'OWNER' | 'MEMBER' | 'EXTERNAL';
-
-export interface MembershipUser {
-	id: string;
-	email: string;
-	name: string | null;
-}
-
-export interface MembershipOrganization {
-	id: string;
-	name: string;
-}
-
-export interface Membership {
-	id: string;
-	userId: string;
-	organizationId: string;
-	role: MembershipRole;
-	createdAt: string;
-	updatedAt: string;
-	user: MembershipUser;
-	organization: MembershipOrganization;
-}
-
-export interface Invitation {
-	id: string;
-	email: string;
-	role: MembershipRole;
-	expiresAt: string;
-	createdAt: string;
-}
 
 /** GET /api/me/memberships — active members of the user's current org. */
 export const getMembershipsServer = createServerFn({ method: 'GET' }).handler(async (): Promise<Membership[]> => {

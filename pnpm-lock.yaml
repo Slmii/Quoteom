@@ -71,6 +71,9 @@ importers:
       '@prisma/client':
         specifier: ^7.8.0
         version: 7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3)
+      '@quoteom/shared':
+        specifier: workspace:*
+        version: link:../shared
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
@@ -154,6 +157,8 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.19)(lightningcss@1.32.0)(terser@5.47.1)
 
+  apps/shared: {}
+
   apps/web:
     dependencies:
       '@emotion/cache':
@@ -174,6 +179,9 @@ importers:
       '@mui/x-date-pickers':
         specifier: ^9.1.0
         version: 9.1.0(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.6))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@mui/material@9.0.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.6))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@mui/system@9.0.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.6))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(dayjs@1.11.20)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@quoteom/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@tanstack/react-query':
         specifier: ^5.100.9
         version: 5.100.10(react@19.2.6)
