@@ -55,45 +55,50 @@ export const InngestFunctionIds = {
 } as const;
 
 /**
- * Step names grouped under their owning function. The grouping prevents accidental
- * collisions (two functions can both have a `fetch-page` step without ambiguity) and
- * makes the dev-UI run timeline scannable.
+ * Step names grouped under their owning function.
+ *
+ * **Every step name is globally unique** — even though Inngest documents step names as
+ * scoped per-function, in dev mode we've observed step result memoization that bleeds
+ * across functions when names collide (e.g. a Microsoft `'sync'` step receiving Gmail's
+ * cached `'sync'` step result with completely wrong shape). Prefixing each step with its
+ * function's provider closes that hole entirely and costs us nothing — the dev-UI run
+ * timeline gets *more* scannable, not less, because step names now read as full sentences.
  */
 export const InngestSteps = {
 	Hello: {
-		ComposeGreeting: 'compose-greeting'
+		ComposeGreeting: 'hello-compose-greeting'
 	},
 	Heartbeat: {
-		RecordTick: 'record-tick'
+		RecordTick: 'heartbeat-record-tick'
 	},
 	GmailBackfill: {
 		/** The whole 90-day fetch + persist loop. One step today; split later if it timeouts. */
-		Backfill: 'backfill',
+		Backfill: 'gmail-backfill',
 		/** Watch-start runs as a separate Inngest step after backfill completes so Inngest's
 		 * retry on a watch failure doesn't re-run the backfill. */
-		StartWatch: 'start-watch'
+		StartWatch: 'gmail-start-watch'
 	},
 	MicrosoftBackfill: {
-		Backfill: 'backfill',
+		Backfill: 'microsoft-backfill',
 		/** Step 2 — register the Graph subscription so future arrivals fire push pings.
 		 * Separate step so an Inngest retry on a subscription failure doesn't re-run the
 		 * (expensive, idempotent-but-slow) backfill. */
-		StartSubscription: 'start-subscription'
+		StartSubscription: 'microsoft-start-subscription'
 	},
 	GmailDeltaSync: {
 		/** Single step: walk history, fetch payloads, persist. */
-		Sync: 'sync'
+		Sync: 'gmail-delta-sync-walk'
 	},
 	GmailWatchRenewal: {
 		/** Single step: scan, re-watch, persist new expiry. */
-		Renew: 'renew'
+		Renew: 'gmail-watch-renew'
 	},
 	MicrosoftDeltaSync: {
 		/** Single step: walk `/me/messages/delta` from cursor, persist new rows. */
-		Sync: 'sync'
+		Sync: 'microsoft-delta-sync-walk'
 	},
 	MicrosoftSubscriptionRenewal: {
 		/** Single step: scan rows, PATCH subscriptions, persist new expiry. */
-		Renew: 'renew'
+		Renew: 'microsoft-subscription-renew'
 	}
 } as const;

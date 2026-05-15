@@ -119,9 +119,21 @@ export class GmailApiService {
 	}
 
 
-	/** List the N most recent message IDs (W3.1 smoke). No filter, no pagination. */
-	async listRecentMessages(accessToken: string, maxResults: number): Promise<GmailMessageStub[]> {
-		const url = `${GMAIL_API_BASE}/users/me/messages?maxResults=${maxResults}`;
+	/**
+	 * List the N most recent INBOX message IDs. Used by the `/settings/email` recent-list
+	 * UI. Scoped to INBOX via `labelIds=INBOX` so Sent / Drafts / Spam never appear in the
+	 * preview — matches the backfill (`q=in:inbox`), watch (`labelIds: ['INBOX']`), and
+	 * history walk (`labelId=INBOX`) so all four ingestion + display paths see the same
+	 * slice of the mailbox.
+	 *
+	 * Renamed from `listRecentMessages` (the W3.1 smoke leftover with no filter) — the
+	 * old name was misleading and produced UI lists that didn't match `RawMessage` rows.
+	 */
+	async listRecentInboxMessages(accessToken: string, maxResults: number): Promise<GmailMessageStub[]> {
+		const params = new URLSearchParams();
+		params.set('maxResults', String(maxResults));
+		params.set('labelIds', 'INBOX');
+		const url = `${GMAIL_API_BASE}/users/me/messages?${params.toString()}`;
 		return (await this.fetchMessagesList(accessToken, url)).messages;
 	}
 
@@ -228,8 +240,14 @@ export class GmailApiService {
 	 * with `errors[0].reason = 'notFound'`. We surface this as `GmailHistoryExpiredException`
 	 * so the caller can fall back to a fresh backfill instead of a half-broken sync.
 	 *
-	 * `historyTypes=messageAdded` filters the response server-side — we don't care about
-	 * label changes / deletions, and asking only for what we use keeps the payload small.
+	 * Two server-side filters keep the payload tight and the corpus consistent with
+	 * backfill (`q=after:... in:inbox`) + watch (`labelIds: ['INBOX']`):
+	 *  - `historyTypes=messageAdded` — we don't process label changes or deletions, asking
+	 *    only for what we use keeps the response small.
+	 *  - `labelId=INBOX` — defense in depth. Even if a push slips through for a non-INBOX
+	 *    event (Gmail's labelIds filter on watch isn't always tight in practice — e.g. a
+	 *    Sent item that gets a label added while INBOX is also briefly touched), we never
+	 *    ingest Sent/Drafts/Spam messages here. Keeps `RawMessage` strictly inbox-scoped.
 	 */
 	async listHistoryPage(
 		accessToken: string,
@@ -238,6 +256,7 @@ export class GmailApiService {
 		const params = new URLSearchParams();
 		params.set('startHistoryId', opts.startHistoryId);
 		params.set('historyTypes', 'messageAdded');
+		params.set('labelId', 'INBOX');
 		if (opts.pageToken) {
 			params.set('pageToken', opts.pageToken);
 		}

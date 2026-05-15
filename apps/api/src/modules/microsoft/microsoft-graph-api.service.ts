@@ -90,12 +90,19 @@ export class MicrosoftSubscriptionNotFoundException extends Error {
 	}
 }
 
-/** Body shape Graph requires when creating a `/me/messages` subscription. */
+/** Body shape Graph requires when creating a subscription. */
 export interface CreateSubscriptionParams {
 	notificationUrl: string;
 	expirationDateTime: string; // ISO 8601 — max ~4230 minutes from now for `messages`
 	clientState: string;
-	resource?: string; // defaults to `/me/messages` if omitted
+	/**
+	 * Graph resource to watch. Defaults to `/me/mailFolders/Inbox/messages` so we ONLY
+	 * receive pushes for inbox arrivals. Without the folder scope, the default `/me/messages`
+	 * fires for Sent items, drafts, Junk, etc. — wasteful (the downstream delta walk is
+	 * Inbox-scoped anyway, so non-INBOX pushes wake the pipeline only to discard the
+	 * result) and confusing in the Inngest UI.
+	 */
+	resource?: string;
 }
 
 /**
@@ -234,9 +241,16 @@ export class MicrosoftGraphApiService {
 	}
 
 	/**
-	 * Create a Graph subscription for `/me/messages` `created` notifications. The caller
-	 * passes a freshly-generated `clientState` (stored encrypted on our side), which Graph
-	 * echoes back on every push delivery so we can authenticate them.
+	 * Create a Graph subscription for inbox `created` notifications. The caller passes a
+	 * freshly-generated `clientState` (stored encrypted on our side), which Graph echoes
+	 * back on every push delivery so we can authenticate them.
+	 *
+	 * Resource defaults to `/me/mailFolders/Inbox/messages` — scopes pushes to inbox
+	 * arrivals only, matching the backfill, recent-list, and delta walk so all four
+	 * ingestion + display paths see the same INBOX-only slice of the mailbox. Both the
+	 * OData "function-call" form (`/me/mailFolders('Inbox')/messages`) and the modern
+	 * "key-as-segment" form used here are accepted by Graph; we standardize on the
+	 * segment form for codebase consistency.
 	 *
 	 * Graph's expiration ceiling for messages is ~4230 minutes (~2.94 days). The caller
 	 * computes the desired expiration and passes it in; Graph rejects out-of-bounds values
@@ -255,7 +269,7 @@ export class MicrosoftGraphApiService {
 		const body = {
 			changeType: 'created',
 			notificationUrl: params.notificationUrl,
-			resource: params.resource ?? '/me/messages',
+			resource: params.resource ?? '/me/mailFolders/Inbox/messages',
 			expirationDateTime: params.expirationDateTime,
 			clientState: params.clientState
 		};
