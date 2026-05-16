@@ -2,13 +2,12 @@ import { useAcceptInvitation } from '@/lib/queries/invitation.queries';
 import { AcceptInviteSearchSchema } from '@/lib/schemas/auth.schema';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { createFileRoute } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
 
 export const Route = createFileRoute('/(auth)/accept-invite')({
 	validateSearch: AcceptInviteSearchSchema,
@@ -17,20 +16,35 @@ export const Route = createFileRoute('/(auth)/accept-invite')({
 
 function AcceptInvitePage() {
 	const { token } = Route.useSearch();
-	const navigate = useNavigate();
 
 	const accept = useAcceptInvitation();
 
+	const hasSubmittedRef = useRef(false);
 	useEffect(() => {
-		accept.mutate(token);
+		if (hasSubmittedRef.current) {
+			return;
+		}
 
-		// We only want to run this effect once on mount, so we can ignore the exhaustive-deps rule here.
-	}, [accept, token]);
+		hasSubmittedRef.current = true;
+
+		accept.mutate(token, {
+			// Hard navigation, not router.navigate. The accept response sets the Auth.js
+			// session cookie inline; we need a full page reload so SSR re-runs with the
+			// new cookie attached and the home page renders authenticated on the server.
+			// Client-side `router.navigate` would re-use the hydrated query cache (which
+			// holds the pre-login `null` session) and bounce the user to /sign-in.
+			onSuccess: () => {
+				window.location.href = '/';
+			}
+		});
+
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [token]);
 
 	return (
 		<Container maxWidth='xs' sx={{ py: 8 }}>
 			<Paper variant='outlined' sx={{ p: 5 }}>
-				{accept.isPending && (
+				{(accept.isPending || accept.isSuccess) && (
 					<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
 						<CircularProgress size={32} />
 						<Typography variant='body2' color='text.secondary'>
@@ -40,20 +54,6 @@ function AcceptInvitePage() {
 				)}
 
 				{accept.isError && <InviteError error={accept.error.message} />}
-
-				{accept.isSuccess && accept.data && (
-					<Box>
-						<Typography variant='h1' sx={{ fontSize: 28, mb: 1 }}>
-							Welcome to {accept.data.organizationName}
-						</Typography>
-						<Typography variant='body1' color='text.secondary' sx={{ mb: 3 }}>
-							Your account has been created. Sign in to continue.
-						</Typography>
-						<Button variant='contained' size='large' fullWidth onClick={() => navigate({ to: '/sign-in' })}>
-							Sign in
-						</Button>
-					</Box>
-				)}
 			</Paper>
 		</Container>
 	);

@@ -241,18 +241,24 @@ export class InvitationsService {
 
 			const normalizedEmail = invitation.email.trim().toLowerCase();
 
-			// Case-insensitive lookup so legacy rows with mixed-case emails still match.
-			// `findUnique` is case-sensitive on a plain text unique index, so combine an
-			// insensitive `findFirst` (handles legacy data) with an explicit create when
-			// no row exists.
+			// Case-insensitive lookup first — handles legacy rows persisted before we
+			// normalized emails to lowercase on write. `findUnique` is case-sensitive on the
+			// plain text unique index, so we fall back to an insensitive `findFirst`.
 			const existing = await tx.user.findFirst({
 				where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
 			});
 
+			// If no row exists, `upsert` by the (case-sensitive) lowercased email. Using
+			// upsert rather than create makes the path idempotent under concurrent accepts —
+			// two transactions racing through the same token both end up with the same User
+			// row instead of the second one tripping the `User_email_key` unique constraint
+			// and aborting the whole transaction (which was the original bug).
 			const user =
 				existing ??
-				(await tx.user.create({
-					data: {
+				(await tx.user.upsert({
+					where: { email: normalizedEmail },
+					update: {},
+					create: {
 						email: normalizedEmail,
 						currentOrganizationId: invitation.organizationId
 					}

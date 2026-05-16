@@ -71,8 +71,13 @@ async function bootstrap() {
 	// Auth.js — mounted as Express middleware on /api/auth/*.
 	// Sits before global pipes/filters because it handles its own request/response lifecycle.
 	// The rate-limit middleware runs FIRST so abusive POSTs (magic-link emit, enumeration)
-	// get 429'd before ExpressAuth ever sees them.
-	app.use('/api/auth', authRateLimitMiddleware, ExpressAuth(authConfig));
+	// get 429'd before ExpressAuth ever sees them. Skipped in development — local invite /
+	// delete-user / sign-in iteration burns through the per-email budget within minutes.
+	if (config.get('NODE_ENV', { infer: true }) === 'production') {
+		app.use('/api/auth', authRateLimitMiddleware, ExpressAuth(authConfig));
+	} else {
+		app.use('/api/auth', ExpressAuth(authConfig));
+	}
 
 	// Inngest — mounted at /api/inngest. Handles 3 verbs internally:
 	//   - GET:  discovery + introspection (used by the dev UI to list functions)

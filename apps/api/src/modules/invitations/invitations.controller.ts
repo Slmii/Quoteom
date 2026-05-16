@@ -1,5 +1,7 @@
 import { OwnerWrite } from '@/common/decorators/owner-write.decorator';
 import { OrganizationGuard } from '@/common/guards/organization.guard';
+import type { EnvSchema } from '@/config/env.schema';
+import { issueSessionCookie } from '@/lib/auth/session-cookie';
 import { AcceptInvitationDto } from '@/modules/invitations/dto/accept-invitation.dto';
 import { AcceptInvitationResponseDto } from '@/modules/invitations/dto/accept-invitation.response.dto';
 import { CreateInvitationDto } from '@/modules/invitations/dto/create-invitation.dto';
@@ -15,15 +17,20 @@ import {
 	Param,
 	Post,
 	Req,
+	Res,
 	UseGuards
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 @ApiTags('invitations')
 @Controller('invitations')
 export class InvitationsController {
-	constructor(private readonly invitations: InvitationsService) {}
+	constructor(
+		private readonly invitations: InvitationsService,
+		private readonly config: ConfigService<EnvSchema, true>
+	) {}
 
 	@ApiOperation({ summary: 'Create an invitation for the active organization' })
 	@ApiOkResponse({ type: InvitationResponseDto })
@@ -57,7 +64,27 @@ export class InvitationsController {
 	@ApiOkResponse({ type: AcceptInvitationResponseDto })
 	@HttpCode(HttpStatus.OK)
 	@Post('accept')
-	async accept(@Body() body: AcceptInvitationDto): Promise<AcceptInvitationResponseDto> {
-		return this.invitations.accept(body.token);
+	async accept(
+		@Body() body: AcceptInvitationDto,
+		@Req() request: Request,
+		@Res({ passthrough: true }) response: Response
+	): Promise<AcceptInvitationResponseDto> {
+		const result = await this.invitations.accept(body.token);
+
+		// Token redemption proves the user controls the email it was sent to — the same
+		// proof a magic link provides. Sign them in directly by issuing an Auth.js-shaped
+		// session cookie, so the web layer can navigate to the dashboard without a second
+		// email round-trip. `passthrough: true` on @Res() keeps NestJS's serializer wired
+		// up so the DTO still flows back through the response body.
+		await issueSessionCookie({
+			response,
+			request,
+			userId: result.userId,
+			email: result.email,
+			authSecret: this.config.get('AUTH_SECRET', { infer: true }),
+			authUrl: this.config.get('AUTH_URL', { infer: true })
+		});
+
+		return result;
 	}
 }
