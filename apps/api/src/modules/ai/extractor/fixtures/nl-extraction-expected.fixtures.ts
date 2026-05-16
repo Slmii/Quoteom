@@ -70,7 +70,11 @@ export const NL_EXTRACTOR_EXPECTED: ExpectedExtraction[] = [
 	{
 		subjectKey: 'Prijsopgave buitenschilderwerk',
 		expected: {
-			customerName: 'Familie de Vries',
+			// fromName "Familie de Vries" is a household label, not a person. The signature
+			// ends "Mvg, Henk" — "Henk" is the actual contact person the user would reply
+			// to. Per the customerName three-step rule (fromName → signature person → team
+			// name), the signature person wins here.
+			customerName: 'Henk',
 			customerEmail: 'devries.familie@ziggo.nl',
 			address: 'Amersfoort',
 			requestType: 'Buitenschilderwerk woning',
@@ -81,7 +85,7 @@ export const NL_EXTRACTOR_EXPECTED: ExpectedExtraction[] = [
 			customerAppointment: '2026-05-29',
 			deliverableHints: ['120 m² wandvlak', '12 kozijnen', 'opname']
 		},
-		notes: 'Inspection-window date populates customerAppointment; no project deadline in body.'
+		notes: 'customerName comes from the signature ("Henk"), not fromName ("Familie de Vries" is a household label). Inspection-window date → customerAppointment.'
 	},
 	{
 		subjectKey: 'Dakkapel aan de achterzijde — vraag voor offerte',
