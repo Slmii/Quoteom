@@ -48,8 +48,13 @@ const DELIVERABLE_HINTS_CAP = 10;
  *    "Bruiloftsfotografie", "Migratie naar Microsoft 365"). The extractor's job is to
  *    summarize, not paraphrase verbatim.
  *  - `urgency`: enum, see above.
- *  - `customerDeadline`: ISO date string (YYYY-MM-DD) if a concrete date can be derived,
- *    null otherwise. The prompt injects today's date for relative-date resolution.
+ *  - `customerDeadline`: ISO date string (YYYY-MM-DD) for the project / delivery /
+ *    completion deadline. Null when no project-completion date is derivable. Inspection
+ *    or visit dates do NOT go here — see `customerAppointment`.
+ *  - `customerAppointment`: ISO date string (YYYY-MM-DD) for a customer-proposed
+ *    inspection / opname / visit / overleg appointment. Distinct from `customerDeadline`
+ *    so the UI can show "customer wants you to visit on X" separately from "customer
+ *    wants the work done by Y." Null when no appointment date is proposed.
  *  - `deliverableHints`: short list of mentioned deliverables ("dakkapel", "funderings-
  *    platen", "houten vlonder ~40 m²"). Capped to keep arrays signal-dense.
  */
@@ -60,6 +65,7 @@ export const ExtractorResultSchema = z.object({
 	requestType: z.string(),
 	urgency: UrgencyEnum,
 	customerDeadline: z.string().nullable(),
+	customerAppointment: z.string().nullable(),
 	deliverableHints: z.array(z.string()).max(DELIVERABLE_HINTS_CAP)
 });
 

@@ -95,11 +95,9 @@ export function buildExtractorPromptNL(input: ExtractorInput, referenceDateIso: 
 		### customerDeadline (ISO-datum YYYY-MM-DD, of null)
 		Concrete datum waarop de klant de OFFERTE, LEVERING, UITVOERING of AFRONDING wil
 		hebben — een projectdeadline. Gebruik GEEN inspectie-, bel-, overleg- of
-		afspraakdatum als deadline; "kom volgende week langs kijken" is geen project-
-		deadline. Voor verzoeken met zowel een inspectie-afspraak ALS een aparte
-		projectdeadline: gebruik de projectdeadline. Als er ALLEEN een afspraakdatum is en
-		geen projectdeadline, retourneer null — het schema heeft (nog) geen apart
-		afspraakveld, dus inspectiedatums verwarren de UI als ze als deadline verschijnen.
+		afspraakdatum als deadline; die horen in \`customerAppointment\`, niet hier.
+		Voor verzoeken met zowel een inspectie-afspraak ALS een aparte projectdeadline:
+		gebruik de projectdeadline hier en zet de inspectie in \`customerAppointment\`.
 
 		Resolveer relatieve termijnen ten opzichte van \`${referenceDateIso}\`. Gebruik
 		altijd het eerstvolgende toekomstige voorkomen ten opzichte van die datum:
@@ -108,7 +106,16 @@ export function buildExtractorPromptNL(input: ExtractorInput, referenceDateIso: 
 		- "voor 1 juli" → eerstvolgende 1 juli op of na de referentiedatum.
 		- "in juni" → laatste dag van de eerstvolgende juni op of na de referentiedatum.
 		- "Q3" → einde van het eerstvolgende Q3 op of na de referentiedatum.
-		Null als geen concrete datum afleidbaar is.
+		Null als geen projectdeadline afleidbaar is.
+
+		### customerAppointment (ISO-datum YYYY-MM-DD, of null)
+		Een door de klant voorgestelde INSPECTIE-, OPNAME-, BEZOEK- of OVERLEG-afspraak-
+		datum. Géén projectdeadline. Voorbeelden: "Kunt u volgende week langskomen?",
+		"Bij voorkeur deze week nog langskomen", "Komt u woensdag 27 mei langs voor een
+		opname?". Resolveer relatieve termijnen ten opzichte van \`${referenceDateIso}\`
+		volgens dezelfde regels als bij \`customerDeadline\`. Null als geen concrete
+		afspraakdatum is voorgesteld (een algemeen "kom maar eens langs" zonder datum
+		telt niet).
 
 		### deliverableHints (string[], maximaal 10)
 		Korte lijst van genoemde concrete leveringen, materialen, hoeveelheden of

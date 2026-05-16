@@ -104,28 +104,39 @@ describeIfKey('ClassifierService — live OpenAI accuracy', () => {
 
 		const overall = results.filter(r => r.correct).length / results.length;
 
-		// Tabular log so prompt iteration is fast: scan the misses, see why each one
-		// flipped, tweak the prompt accordingly.
-		console.log(`\nClassifier accuracy (Dutch corpus, ${results.length} fixtures):`);
-		console.log(
-			`  Overall: ${(overall * 100).toFixed(1)}% (${results.filter(r => r.correct).length}/${results.length})`
-		);
+		// Verbose per-fixture log so prompt iteration is fast: every fixture's actual vs
+		// expected is visible, not just the ones that crossed the threshold. Lets you spot
+		// fixtures that "passed" but with low confidence, or misses with high confidence
+		// (both are interesting signals for prompt iteration).
+		console.log(`\n${'─'.repeat(80)}`);
+		console.log('Classifier accuracy — per-fixture results');
+		console.log('─'.repeat(80));
 
-		for (const [name, c] of Object.entries(byCategory)) {
-			console.log(`  ${name.padEnd(8)}: ${((c.correct / c.total) * 100).toFixed(1)}% (${c.correct}/${c.total})`);
-		}
-
-		console.log('\nMisses:');
-
-		for (const r of results.filter(rr => !rr.correct)) {
+		for (const r of results) {
 			const expected = r.fixture.expectedIsQuote;
 			const got = r.result?.isQuote;
 			const conf = r.result?.confidence;
-			const reason = r.result?.reason ?? r.error;
+			const reason = r.result?.reason ?? r.error ?? '(no reason)';
+			const mark = r.correct ? '✅' : '❌';
 			console.log(
-				`  [${r.fixture.category}] subject="${r.fixture.input.subject}" — expected ${expected}, got ${got} (conf=${conf?.toFixed(2)}): ${reason}`
+				`${mark} [${r.fixture.category.padEnd(8)}] "${r.fixture.input.subject}"`
 			);
+			console.log(
+				`     expected=${expected}  got=${got}  conf=${conf !== undefined ? conf.toFixed(2) : 'n/a'}`
+			);
+			console.log(`     reason: ${reason}`);
 		}
+
+		console.log(`\n${'─'.repeat(80)}`);
+		console.log('Summary');
+		console.log('─'.repeat(80));
+		console.log(
+			`  Overall: ${(overall * 100).toFixed(1)}% (${results.filter(r => r.correct).length}/${results.length})`
+		);
+		for (const [name, c] of Object.entries(byCategory)) {
+			console.log(`  ${name.padEnd(8)}: ${((c.correct / c.total) * 100).toFixed(1)}% (${c.correct}/${c.total})`);
+		}
+		console.log('');
 
 		expect(overall).toBeGreaterThanOrEqual(MIN_ACCURACY);
 	});

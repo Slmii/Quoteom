@@ -23,7 +23,10 @@
 		"test:watch": "jest --watch",
 		"test:cov": "jest --coverage",
 		"test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-		"test:e2e": "jest --config ./test/jest-e2e.json"
+		"test:e2e": "jest --config ./test/jest-e2e.json",
+		"test:ai": "node scripts/run-jest-with-env.cjs --testPathPatterns='accuracy'",
+		"test:ai:classifier": "node scripts/run-jest-with-env.cjs --testPathPatterns='classifier.accuracy'",
+		"test:ai:extractor": "node scripts/run-jest-with-env.cjs --testPathPatterns='extractor.accuracy'"
 	},
 	"dependencies": {
 		"@auth/core": "^0.41.2",

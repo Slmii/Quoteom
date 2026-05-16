@@ -90,28 +90,45 @@ describeIfKey('ExtractorService — live OpenAI accuracy', () => {
 		);
 
 		let passed = 0;
-		console.log(`\nExtractor accuracy (Dutch corpus, ${results.length} positives):`);
+		console.log(`\n${'─'.repeat(80)}`);
+		console.log('Extractor accuracy — per-fixture results');
+		console.log('─'.repeat(80));
 
 		for (const r of results) {
 			if (!r.result) {
-				console.log(`  ❌ "${r.subject}" — extraction failed: ${r.error}`);
+				console.log(`❌ "${r.subject}" — extraction failed: ${r.error}`);
 				continue;
 			}
 			const grade = gradeExtraction(r.result, r.expected.expected);
 			const acceptable = grade.fieldsPassing >= MIN_FIELDS_PASSING;
 			if (acceptable) {
 				passed += 1;
-				console.log(`  ✅ "${r.subject}" — ${grade.fieldsPassing}/${FIELDS_PER_FIXTURE} fields passed`);
-			} else {
-				console.log(`  ❌ "${r.subject}" — only ${grade.fieldsPassing}/${FIELDS_PER_FIXTURE} fields passed`);
-				for (const miss of grade.misses) {
-					console.log(`       ${miss}`);
+			}
+			const mark = acceptable ? '✅' : '❌';
+			console.log(`${mark} "${r.subject}" — ${grade.fieldsPassing}/${FIELDS_PER_FIXTURE} fields passed`);
+
+			// Every field's actual + expected, marked pass/fail. Same info regardless of
+			// whether the fixture passed or failed — lets us see which fields the model
+			// is consistently weak on across the corpus.
+			for (const field of grade.fields) {
+				const fieldMark = field.ok ? '✅' : '❌';
+				const expectedStr = JSON.stringify(field.expected);
+				const actualStr = JSON.stringify(field.actual);
+				if (field.ok) {
+					console.log(`     ${fieldMark} ${field.name.padEnd(20)} ${actualStr}`);
+				} else {
+					console.log(
+						`     ${fieldMark} ${field.name.padEnd(20)} expected=${expectedStr}  got=${actualStr}`
+					);
 				}
 			}
 		}
 
 		const accuracy = passed / results.length;
-		console.log(`\n  Overall: ${(accuracy * 100).toFixed(1)}% (${passed}/${results.length} fixtures passed)\n`);
+		console.log(`\n${'─'.repeat(80)}`);
+		console.log('Summary');
+		console.log('─'.repeat(80));
+		console.log(`  Overall: ${(accuracy * 100).toFixed(1)}% (${passed}/${results.length} fixtures passed)\n`);
 
 		expect(accuracy).toBeGreaterThanOrEqual(MIN_OVERALL_ACCURACY);
 	});
@@ -123,36 +140,41 @@ if (!hasApiKey) {
 
 // ─── Grading helpers ────────────────────────────────────────────────────────────────
 
+interface FieldResult {
+	name: string;
+	ok: boolean;
+	actual: unknown;
+	expected: unknown;
+}
+
 interface Grade {
 	fieldsPassing: number;
-	misses: string[];
+	fields: FieldResult[];
 }
 
 function gradeExtraction(actual: ExtractorResult, expected: ExtractorResult): Grade {
-	const misses: string[] = [];
-	let passing = 0;
-
-	const checks: Array<[string, boolean]> = [
+	const checks: Array<[keyof ExtractorResult, boolean]> = [
 		['customerName', fuzzyMatch(actual.customerName, expected.customerName)],
 		['customerEmail', exactNullable(actual.customerEmail, expected.customerEmail)],
 		['address', fuzzyMatch(actual.address, expected.address)],
 		['requestType', fuzzyMatch(actual.requestType, expected.requestType)],
 		['urgency', exactUrgency(actual.urgency, expected.urgency)],
 		['customerDeadline', dateMatch(actual.customerDeadline, expected.customerDeadline)],
+		['customerAppointment', dateMatch(actual.customerAppointment, expected.customerAppointment)],
 		['deliverableHints', hintsMatch(actual.deliverableHints, expected.deliverableHints)]
 	];
 
-	for (const [name, ok] of checks) {
-		if (ok) {
-			passing += 1;
-		} else {
-			const actualVal = (actual as unknown as Record<string, unknown>)[name];
-			const expectedVal = (expected as unknown as Record<string, unknown>)[name];
-			misses.push(`${name}: expected ${JSON.stringify(expectedVal)}, got ${JSON.stringify(actualVal)}`);
-		}
-	}
+	const fields: FieldResult[] = checks.map(([name, ok]) => ({
+		name: name as string,
+		ok,
+		actual: actual[name],
+		expected: expected[name]
+	}));
 
-	return { fieldsPassing: passing, misses };
+	return {
+		fieldsPassing: fields.filter(f => f.ok).length,
+		fields
+	};
 }
 
 function exactNullable(actual: string | null, expected: string | null): boolean {
