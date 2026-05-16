@@ -45,6 +45,28 @@ enum EmailProvider {
     MICROSOFT
 }
 
+// W4.1 — Per-call log of every AI provider invocation.
+// One row per `AIClient.generate(...)` call. Used for:
+//  - **Replay**: rerun the same prompt against a different model when the prompt is iterated.
+//    The `prompt` + `parsed` columns together let us reconstruct what the AI saw and what
+//    it produced without needing to re-fetch the original `RawMessage`.
+//  - **Cost tracking**: sum `promptTokens` + `completionTokens` per org per month.
+//  - **Debugging**: filter by `status = 'schema_invalid'` to see which prompts produce
+//    malformed outputs (signals a prompt that needs tightening).
+//  - **Year-2 self-improvement**: when classifier accuracy improves later, re-run the new
+//    prompt over historical `AICall` rows to see how many false negatives the old version
+//    missed.
+//
+// We persist the full prompt + response as text — for a typical email + structured output,
+// this is ~2-5kB per row. At 10k emails/month/org that's ~30MB/month — Postgres handles
+// fine, and the value of being able to debug + replay is high.
+enum AICallStatus {
+    SUCCESS
+    FAILED
+    SCHEMA_INVALID
+    TIMEOUT
+}
+
 model User {
     id                    String    @id @default(uuid()) @db.Uuid
     email                 String    @unique
@@ -94,28 +116,6 @@ model Log {
     @@index([level, createdAt(sort: Desc)])
     @@index([organizationId, createdAt(sort: Desc)])
     @@index([requestId])
-}
-
-// W4.1 — Per-call log of every AI provider invocation.
-// One row per `AIClient.generate(...)` call. Used for:
-//  - **Replay**: rerun the same prompt against a different model when the prompt is iterated.
-//    The `prompt` + `parsed` columns together let us reconstruct what the AI saw and what
-//    it produced without needing to re-fetch the original `RawMessage`.
-//  - **Cost tracking**: sum `promptTokens` + `completionTokens` per org per month.
-//  - **Debugging**: filter by `status = 'schema_invalid'` to see which prompts produce
-//    malformed outputs (signals a prompt that needs tightening).
-//  - **Year-2 self-improvement**: when classifier accuracy improves later, re-run the new
-//    prompt over historical `AICall` rows to see how many false negatives the old version
-//    missed.
-//
-// We persist the full prompt + response as text — for a typical email + structured output,
-// this is ~2-5kB per row. At 10k emails/month/org that's ~30MB/month — Postgres handles
-// fine, and the value of being able to debug + replay is high.
-enum AICallStatus {
-    SUCCESS
-    FAILED
-    SCHEMA_INVALID
-    TIMEOUT
 }
 
 model AICall {
@@ -271,56 +271,56 @@ model Subscription {
 }
 
 model EmailAccount {
-    id                   String        @id @default(uuid()) @db.Uuid
-    organizationId       String        @db.Uuid
+    id                      String        @id @default(uuid()) @db.Uuid
+    organizationId          String        @db.Uuid
     // The user who connected this mailbox. Useful for audit ("who linked this account")
     // and a future "only the connector or an OWNER can disconnect" guard. ON DELETE SET
     // NULL so removing the user doesn't drop the org's inbox connection silently.
-    userId               String?       @db.Uuid
-    provider             EmailProvider
+    userId                  String?       @db.Uuid
+    provider                EmailProvider
     // Provider's stable account identifier (Gmail: the resource id / sub; Graph: oid).
-    providerAccountId    String
+    providerAccountId       String
     // The mailbox address itself, for display purposes only. Don't key off this — users
     // can alias addresses to the same Gmail account.
-    email                String
+    email                   String
     // Granted OAuth scopes (space-separated). Compared against required scopes on each
     // start-of-sync; a mismatch triggers a re-consent prompt instead of a silent fail.
-    scope                String        @db.Text
-    accessToken          String        @db.Text
-    refreshToken         String        @db.Text
+    scope                   String        @db.Text
+    accessToken             String        @db.Text
+    refreshToken            String        @db.Text
     // When the current access token expires (server time). Lazy-refreshed by the Gmail
     // service when the call is within ~60s of expiry. Null on first connect until the
     // first successful exchange writes it.
-    accessTokenExpiresAt DateTime?
+    accessTokenExpiresAt    DateTime?
     // Gmail's `historyId` from the last successful list/sync. Used in W3.5 for delta
     // sync via `users.history.list`. Null until W3.4 backfill records one.
-    historyId            String?
+    historyId               String?
     // Microsoft Graph's `@odata.deltaLink` from the last successful `/me/messages/delta`
     // page walk (W3.6). Stored as the FULL URL Graph returns (includes a server-issued
     // token), not a synthetic short form. Null until backfill records one. On Graph this
     // serves the same purpose as `historyId` for Gmail — only one of the two will be set
     // per row, based on `provider`.
-    deltaLink            String?       @db.Text
+    deltaLink               String?       @db.Text
     // Push subscription expiry — applies to BOTH providers but the TTLs differ:
     //   - Gmail: 7-day TTL, daily cron renews rows with < 24 h remaining.
     //   - Microsoft Graph: 3-day TTL, twice-daily cron with the same 24 h-remaining buffer.
     // Renamed semantically from the W3.5-era "watchExpiresAt" since Graph uses
     // "subscription" terminology, but keeping the column name avoids a destructive
     // migration.
-    watchExpiresAt       DateTime?
+    watchExpiresAt          DateTime?
     // Microsoft Graph subscription resource ID (W3.6). Returned by POST /subscriptions.
     // Required for PATCH-based renewal and for DELETE on disconnect. Null when provider
     // is GMAIL or before the subscription has been registered.
-    subscriptionId       String?
+    subscriptionId          String?
     // Microsoft Graph `clientState` — shared secret echoed back on every push delivery.
     // We generate it at subscription-create time (random 32 bytes hex), store encrypted
     // here, and compare equality on every incoming push to authenticate it. Graph's
     // equivalent of Pub/Sub's JWT (simpler, no JWKS/JWT crypto). Stored encrypted
     // because leakage would let anyone post fake notifications and trigger delta-syncs.
     // Null for Gmail rows.
-    subscriptionClientState String?    @db.Text
-    createdAt            DateTime      @default(now())
-    updatedAt            DateTime      @updatedAt
+    subscriptionClientState String?       @db.Text
+    createdAt               DateTime      @default(now())
+    updatedAt               DateTime      @updatedAt
 
     organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
     user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
