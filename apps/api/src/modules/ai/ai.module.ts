@@ -1,6 +1,7 @@
 import { AI_CLIENT } from '@/modules/ai/clients/ai-client.interface';
 import { OpenAIClient } from '@/modules/ai/clients/openai-client.service';
 import { ClassifierService } from '@/modules/ai/classifier/classifier.service';
+import { ExtractorService } from '@/modules/ai/extractor/extractor.service';
 import { AICallLogger } from '@/modules/ai/logging/ai-call-logger.service';
 import { Module } from '@nestjs/common';
 
@@ -30,8 +31,9 @@ import { Module } from '@nestjs/common';
 			provide: AI_CLIENT,
 			useExisting: OpenAIClient
 		},
-		ClassifierService
+		ClassifierService,
+		ExtractorService
 	],
-	exports: [AI_CLIENT, AICallLogger, ClassifierService]
+	exports: [AI_CLIENT, AICallLogger, ClassifierService, ExtractorService]
 })
 export class AiModule {}

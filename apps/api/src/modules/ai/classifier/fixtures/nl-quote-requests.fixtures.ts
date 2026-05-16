@@ -773,5 +773,107 @@ export const NL_CLASSIFIER_FIXTURES: ClassifierFixture[] = [
 				Ellen
 			`
 		}
+	},
+
+	// ─── EXTRACTION-RULE TARGETED EDGES (5): each tests a specific extractor prompt rule ───
+
+	{
+		category: 'edge',
+		expectedIsQuote: true,
+		notes: 'EXTRACTOR EDGE — body signature has a different email than `fromEmail`. The `customerEmail` rule must prefer `fromEmail`, NOT the signature email.',
+		input: {
+			subject: 'Offerte zonweringen showroom',
+			fromName: 'Sven Akkermans',
+			fromEmail: 'sven.akkermans@quartzcompany.nl',
+			bodyText: dedent`
+				Hallo,
+
+				Voor onze showroom in Tilburg willen we elektrisch bedienbare zonweringen laten plaatsen. Het betreft 3 grote etalageramen (elk ~4m breed). Kunt u een offerte uitbrengen?
+
+				--
+				Sven Akkermans
+				Quartz Company BV
+				marketing@quartzcompany.nl
+				www.quartzcompany.nl
+			`
+		}
+	},
+	{
+		category: 'edge',
+		expectedIsQuote: true,
+		notes: 'EXTRACTOR EDGE — sender explicitly redirects replies. The `customerEmail` body-override rule should fire and use the directed address.',
+		input: {
+			subject: 'Renovatie kantoorruimte — graag offerte',
+			fromName: 'Receptie — DeVries Notarissen',
+			fromEmail: 'receptie@devries-notarissen.nl',
+			bodyText: dedent`
+				Goedendag,
+
+				Voor onze kantoorruimte in Zwolle (250 m²) plannen we een volledige interieurrenovatie. Graag een offerte voor het werk.
+
+				Voor verdere correspondentie hierover graag rechtstreeks contact opnemen met onze facility manager: mail naar j.terhaar@devries-notarissen.nl.
+
+				Met vriendelijke groet,
+				Receptie
+			`
+		}
+	},
+	{
+		category: 'edge',
+		expectedIsQuote: true,
+		notes: 'EXTRACTOR EDGE — signature contains company business address; the actual WORK location is different. The `address` rule must prefer the work site, not the signature.',
+		input: {
+			subject: 'Schilderwerk magazijn',
+			fromName: 'Mariska Bouwman',
+			fromEmail: 'mariska@logiplus-bv.nl',
+			bodyText: dedent`
+				Beste,
+
+				Onze nieuwe magazijnlocatie in Veghel (Wilhelminalaan 12) heeft binnenkort schilderwerk nodig — ongeveer 600 m² wandvlak, plus de buitendeuren.
+
+				Kunt u een offerte uitbrengen? Komt u langs voor opname?
+
+				Met vriendelijke groet,
+				Mariska Bouwman
+				LogiPlus BV — Hoofdkantoor: Industrieweg 88, 5051 DD Goirle
+			`
+		}
+	},
+	{
+		category: 'edge',
+		expectedIsQuote: true,
+		notes: 'EXTRACTOR EDGE — inspection-only date, no project deadline. `customerDeadline` must be null even though "morgen" appears. Urgency: high (short timeframe, non-emergency context).',
+		input: {
+			subject: 'Schade tuinmuur — kunt u morgen komen kijken?',
+			fromName: 'Hans Verschoor',
+			fromEmail: 'h.verschoor@gmail.com',
+			bodyText: dedent`
+				Goedemiddag,
+
+				Door de storm van gisteren is een deel van onze tuinmuur omgevallen (~6 meter lengte, klinkerwerk). Kunt u morgen langskomen om de schade op te nemen? Daarna hoor ik graag wat het zou kosten om opnieuw te metselen.
+
+				Met groet, Hans
+			`
+		}
+	},
+	{
+		category: 'edge',
+		expectedIsQuote: true,
+		notes: 'EXTRACTOR EDGE — both an inspection date AND a project deadline. `customerDeadline` should resolve to the project deadline (offerte before Friday), NOT the visit date.',
+		input: {
+			subject: 'Offerte airconditioning kantoor',
+			fromName: 'Sandra Meijer',
+			fromEmail: 'sandra@kerkenraad-utrecht.nl',
+			bodyText: dedent`
+				Beste,
+
+				Wij willen graag airconditioning laten installeren in twee kantoorruimtes (samen ~80 m²) in Utrecht.
+
+				Komt u woensdag 27 mei langs voor een opname? En de offerte ontvangen wij graag uiterlijk vrijdag 29 mei, want we moeten dan een keuze maken tussen leveranciers.
+
+				Met vriendelijke groet,
+				Sandra Meijer
+			`
+		}
 	}
 ];
