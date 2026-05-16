@@ -1,6 +1,7 @@
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { validateEnv } from '@/config/env.schema';
+import { AiModule } from '@/modules/ai/ai.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BillingModule } from '@/modules/billing/billing.module';
 import { EmailAccountsModule } from '@/modules/email-accounts/email-accounts.module';
@@ -45,7 +46,8 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 		EmailAccountsModule,
 		GmailModule,
 		MicrosoftModule,
-		InngestModule
+		InngestModule,
+		AiModule
 	],
 	controllers: [AppController],
 	providers: [AppService, PrismaService, { provide: APP_GUARD, useClass: ThrottlerGuard }]

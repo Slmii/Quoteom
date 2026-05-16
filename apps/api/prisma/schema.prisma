@@ -96,6 +96,69 @@ model Log {
     @@index([requestId])
 }
 
+// W4.1 — Per-call log of every AI provider invocation.
+// One row per `AIClient.generate(...)` call. Used for:
+//  - **Replay**: rerun the same prompt against a different model when the prompt is iterated.
+//    The `prompt` + `parsed` columns together let us reconstruct what the AI saw and what
+//    it produced without needing to re-fetch the original `RawMessage`.
+//  - **Cost tracking**: sum `promptTokens` + `completionTokens` per org per month.
+//  - **Debugging**: filter by `status = 'schema_invalid'` to see which prompts produce
+//    malformed outputs (signals a prompt that needs tightening).
+//  - **Year-2 self-improvement**: when classifier accuracy improves later, re-run the new
+//    prompt over historical `AICall` rows to see how many false negatives the old version
+//    missed.
+//
+// We persist the full prompt + response as text — for a typical email + structured output,
+// this is ~2-5kB per row. At 10k emails/month/org that's ~30MB/month — Postgres handles
+// fine, and the value of being able to debug + replay is high.
+enum AICallStatus {
+    SUCCESS
+    FAILED
+    SCHEMA_INVALID
+    TIMEOUT
+}
+
+model AICall {
+    id               String       @id @default(uuid()) @db.Uuid
+    // 'openai' | 'azure-openai' | 'mistral' | 'anthropic' (string, not enum, so adding a
+    // provider doesn't require a Prisma migration).
+    provider         String
+    // The actual model identifier sent to the provider (e.g. 'gpt-4o-mini', 'gpt-4o',
+    // 'mistral-large-latest', 'claude-sonnet-4-5'). Free text — providers add SKUs faster
+    // than we'd want to migrate the schema for.
+    model            String
+    // The application-level intent: 'classifier' | 'extractor' | 'tone-learn' | 'reply-draft'
+    // | etc. Driven by the caller — used for grouping in debug queries ("show me all
+    // classifier calls that returned schema_invalid").
+    purpose          String
+    // The full prompt sent to the provider. May be large (~1-5kB typical). Stored verbatim
+    // so we can replay against a different model later.
+    prompt           String       @db.Text
+    // Raw text response from the provider. Null if the call failed before a response was
+    // received (network error, 5xx after retries exhausted).
+    response         String?      @db.Text
+    // Parsed structured output (Zod-validated). Null if the response wasn't valid against
+    // the schema OR if no response was received. Lets W4+ services skip re-parsing.
+    parsed           Json?
+    status           AICallStatus
+    errorMessage     String?      @db.Text
+    promptTokens     Int?
+    completionTokens Int?
+    // Wall-clock duration of the call including retries. Useful for SLA tracking.
+    latencyMs        Int
+    // Correlation fields — auto-populated by `AICallLogger` from `RequestContext`
+    // AsyncLocalStorage. May be null when the call originates outside a request (e.g.
+    // an Inngest function running on a cron).
+    requestId        String?
+    userId           String?      @db.Uuid
+    organizationId   String?      @db.Uuid
+    createdAt        DateTime     @default(now())
+
+    @@index([organizationId, createdAt(sort: Desc)])
+    @@index([purpose, status, createdAt(sort: Desc)])
+    @@index([requestId])
+}
+
 // W2.1 — Auth.js (v5) Prisma adapter models.
 // Schema dictated by @auth/prisma-adapter; field names use snake_case in places
 // where the adapter expects them. Do not rename.

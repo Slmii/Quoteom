@@ -81,7 +81,26 @@ export const envSchema = z.object({
 	//  - INNGEST_EVENT_KEY  → required when sending events to Inngest Cloud.
 	//  - INNGEST_SIGNING_KEY → required for the cloud handler to verify it's really us.
 	INNGEST_EVENT_KEY: z.string().optional(),
-	INNGEST_SIGNING_KEY: z.string().optional()
+	INNGEST_SIGNING_KEY: z.string().optional(),
+
+	// W4.1 — AI provider (OpenAI / Azure OpenAI).
+	// Direct OpenAI mode: leave AZURE_OPENAI_* unset; the client hits api.openai.com using
+	// `OPENAI_API_KEY`. Easiest signup, US-routed by default.
+	// Azure OpenAI mode (EU data residency): set `AZURE_OPENAI_ENDPOINT` to your Azure
+	// resource URL (e.g. `https://quoteom.openai.azure.com`); the client switches to Azure
+	// routing using `AZURE_OPENAI_API_KEY` (falls back to OPENAI_API_KEY if unset).
+	// Both keys optional in dev — when missing, the AI module's `generate()` throws a clear
+	// "OpenAI not configured" error rather than silently using a fake.
+	OPENAI_API_KEY: z.string().optional(),
+	OPENAI_MODEL_CLASSIFIER: z.string().default('gpt-4o-mini'),
+	OPENAI_MODEL_EXTRACTOR: z.string().default('gpt-4o'),
+	AZURE_OPENAI_ENDPOINT: z.string().optional(),
+	AZURE_OPENAI_API_KEY: z.string().optional(),
+	// Azure pins the API version per request. We use OpenAI's Responses API (recommended
+	// for new projects); Azure Responses-API support was added in `2025-03-01-preview`.
+	// Bump only when a GA version with Responses-API parity ships; chasing preview tags
+	// has historically been more pain than benefit for stability.
+	AZURE_OPENAI_API_VERSION: z.string().default('2025-03-01-preview')
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;
