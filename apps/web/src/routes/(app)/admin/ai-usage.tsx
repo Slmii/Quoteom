@@ -1,5 +1,4 @@
 import { aiUsageQueryOptions } from '@/lib/queries/ai-usage.queries';
-import { myMembershipQueryOptions } from '@/lib/queries/team.queries';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -17,26 +16,18 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import type { AIUsageRange } from '@quoteom/shared';
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { z } from 'zod';
 
 const SearchSchema = z.object({
 	range: z.enum(['today', '7d', '30d', 'all']).default('7d')
 });
 
+// Admin allowlist gate lives on the parent `(app)/admin/route.tsx` layout — every
+// `/admin/*` route inherits it, so this route only owns its own data loading.
 export const Route = createFileRoute('/(app)/admin/ai-usage')({
 	validateSearch: SearchSchema,
 	loaderDeps: ({ search: { range } }) => ({ range }),
-	// Gate the route on the same `ADMIN_EMAILS` allowlist the API enforces. Computed
-	// server-side and surfaced as `user.isAdmin` on the membership response — the
-	// allowlist itself never reaches the browser. Non-admins get bounced to `/` cleanly
-	// instead of seeing the API's 403 surfaced as a router error.
-	beforeLoad: async ({ context }) => {
-		const membership = await context.queryClient.ensureQueryData(myMembershipQueryOptions);
-		if (!membership.user.isAdmin) {
-			throw redirect({ to: '/' });
-		}
-	},
 	loader: ({ context, deps }) => context.queryClient.ensureQueryData(aiUsageQueryOptions(deps.range)),
 	component: AIUsagePage
 });
