@@ -5,7 +5,7 @@
 	"scripts": {
 		"build": "nest build",
 		"start": "nest start",
-		"dev": "nest start --watch",
+		"dev": "pnpm --filter @quoteom/shared build && (trap 'kill 0' INT TERM EXIT; pnpm --filter @quoteom/shared dev & nest start --watch)",
 		"debug": "nest start --debug --watch",
 		"prod": "node dist/main",
 		"lint": "eslint src",

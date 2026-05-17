@@ -9,7 +9,7 @@
 			"outputs": ["dist/**", ".output/**", ".nitro/**", ".tanstack/**"]
 		},
 		"dev": {
-			"dependsOn": ["db:generate"],
+			"dependsOn": ["^build", "db:generate"],
 			"cache": false,
 			"persistent": true
 		},
