@@ -69,6 +69,12 @@ export function buildClassifierPromptNL(input: ClassifierInput): string {
 		## Classificeer als isQuote = false wanneer:
 		- Het een nieuwsbrief, marketingmail, spam, automatische melding, factuur, herinnering, orderbevestiging, wachtwoordreset of agenda-uitnodiging is.
 		- Een leverancier of verkoper probeert iets aan het ontvangende bedrijf te verkopen (cold outreach in de OMGEKEERDE richting).
+		- **Affiliate/lead-gen marketing**: de e-mail nodigt de LEZER uit om offertes "aan te vragen" of "te ontvangen" via een externe link — de lezer is dus het doelwit, NIET de potentiële klant. Tells:
+			- Een algemene afzendernaam zonder persoon (bv. "Offertes-isolatie", "Vergelijkbox", "ZonneOfferte") of een afzender zonder e-mailadres.
+			- Call-to-action knoppen of links zoals "Ontvang offertes", "Vraag offertes aan", "Vergelijk offertes" die naar een externe site wijzen (vaak verkort: bit.ly, t.co, tinyurl, list-manage, mailchi.mp, e.d.).
+			- Uitschrijflink of -tekst in de e-mail ("uitschrijven", "afmelden voor deze e-mails", "click here to remove yourself from our emails list", "manage your preferences"). Echte particuliere offerteaanvragen hebben dit nooit.
+			- Generieke verkooppraatjes ("Bespaar nu", "Subsidie ontvangen", "De winter komt eraan") zonder concrete situatie van de afzender.
+			Eén van deze tells = isQuote = false met confidence ≥ 0.8.
 		- De afzender reageert op een offerte die het ontvangende bedrijf al heeft gestuurd — vragen, akkoord, afwijzing, onderhandeling. Dat is geen NIEUWE aanvraag.
 		- De afzender alleen algemene informatie vraagt zonder concrete opdracht, product, dienst, hoeveelheid, situatie of prijsintentie.
 		- Het een persoonlijke e-mail of interne/administratieve communicatie is.
@@ -77,6 +83,7 @@ export function buildClassifierPromptNL(input: ClassifierInput): string {
 		## Randgevallen
 		- Twijfel tussen algemene informatievraag en offerteaanvraag → kies alleen true als er én concrete dienst/product/opdracht én prijs- of voorstelintentie aanwezig is.
 		- Twijfel of het een vervolg op een bestaande offerte is → kies false.
+		- **Twijfel over richting** ("vraag een offerte aan" — wie aan wie?): kijk naar de afzender. Persoon met concrete situatie + locatie = true. Generieke marketing-afzender of externe CTA-link = false.
 		- Geef confidence lager dan 0.6 als het écht ambigu is.
 
 		## Antwoordvelden

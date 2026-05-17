@@ -4,7 +4,7 @@ import dedent from 'dedent';
 /**
  * Hand-curated Dutch fixture corpus for the W4.2 classifier accuracy harness.
  *
- * 38 emails across three categories:
+ * 39 emails across three categories:
  *  - `positive`: clear offerteaanvragen — different trades, different phrasings
  *  - `negative`: clear non-quote-requests — newsletters, transactional, marketing, personal
  *  - `edge`: messy cases (incl. adversarial injection attempts, forwarded mail, attachment-only
@@ -873,6 +873,38 @@ export const NL_CLASSIFIER_FIXTURES: ClassifierFixture[] = [
 
 				Met vriendelijke groet,
 				Sandra Meijer
+			`
+		}
+	},
+	{
+		category: 'edge',
+		expectedIsQuote: false,
+		notes: 'EDGE — vendor-marketing email that uses quote-request vocabulary to bait clicks. Reader is the RECIPIENT being prompted to ask vendor for quotes, NOT a prospect requesting one. Tells: tracking URLs (bit.ly), generic vendor sender with no domain, explicit "Ontvang offertes van installateurs" CTA pointing outward, and an unsubscribe footer. Real-world miss from a production inbox.',
+		input: {
+			subject: 'Gratis isolatie offertes',
+			fromName: 'Offertes-isolatie',
+			fromEmail: null,
+			bodyText: dedent`
+				Start nu met verduurzamen en bespaar op je rekening!
+
+				Gratis isolatie offertes
+
+				Start met besparen en ontvang subsidie! Vraag nu een offerte aan.
+
+				De winter komt eraan, en dat betekent dat de verwarmingskosten zullen stijgen.
+
+				Heb je er al bij stilgestaan dat je niet alleen het milieu helpt, maar ook je portemonnee? Goede isolatie helpt warmteverlies te verminderen, wat leidt tot lagere energiekosten gedurende het hele jaar.
+
+				Aarzel niet langer en Begin vandaag met besparen op uw energierekening en profiteer van subsidies voor isolatie. Ontvang geheel vrijblijvend offertes (https://bit.ly/47DkpAJ) van gerenommeerde lokale installateurs. Door meerdere offertes te vergelijken, kun je niet alleen de beste deal vinden, maar ook aanzienlijk besparen op je investering!
+
+				Voordelen van geïsoleerd huis op een rij:
+				- Lagere Energierekeningen
+				- Comfortabeler Wonen
+				- Verhoogde Waarde van uw Woning
+
+				Ontvang gratis offertes: https://bit.ly/47DkpAJ
+
+				click here to remove yourself from our emails list
 			`
 		}
 	}

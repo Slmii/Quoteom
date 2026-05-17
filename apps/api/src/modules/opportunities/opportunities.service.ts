@@ -25,6 +25,7 @@ import type {
 	OpportunityProcessingBatchResult,
 	OpportunityProcessingResult
 } from '@/modules/opportunities/opportunities.types';
+import { detectBulkMail } from '@/lib/email/bulk-mail-filter';
 import { buildRawMessageAIInput } from '@/lib/email/raw-message-ai-input';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -232,6 +233,28 @@ export class OpportunitiesService {
 		result.scanned += 1;
 
 		try {
+			// Pre-filter: short-circuit obvious bulk/marketing mail BEFORE the AI call.
+			// Same negative-result effect as a classifier "no" but avoids the OpenAI cost
+			// and prevents the well-known vendor-direction misclassification (emails with
+			// "offerte aanvragen" / "free quotes" copy from vendors, not from customers).
+			const bulkMail = detectBulkMail({ provider: rawMessage.provider, raw: rawMessage.raw });
+			if (bulkMail.isBulk) {
+				await this.repository.markRawMessageNegative(rawMessage.id);
+				result.classifiedNegative += 1;
+				this.logService.logAction({
+					action: 'opportunity.pipeline.bulk_mail_skipped',
+					message: `RawMessage ${rawMessage.id} short-circuited as bulk mail (${bulkMail.reason})`,
+					metadata: {
+						rawMessageId: rawMessage.id,
+						emailAccountId: rawMessage.emailAccountId,
+						organizationId: rawMessage.organizationId,
+						reason: bulkMail.reason
+					},
+					context: 'OpportunitiesService'
+				});
+				return true;
+			}
+
 			const input = buildRawMessageAIInput({
 				provider: rawMessage.provider,
 				subject: rawMessage.subject,
