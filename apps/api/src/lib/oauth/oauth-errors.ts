@@ -74,3 +74,24 @@ export class MailboxUnauthorizedException extends Error {
 		this.name = 'MailboxUnauthorizedException';
 	}
 }
+
+/**
+ * Thrown by Gmail / Microsoft OAuth helpers during the connect-callback path when
+ * something goes wrong AFTER the user has already consented and the browser is on the
+ * way back to us. The controller catches this and redirects to `/settings/email?error=…`
+ * with the structured code instead of surfacing a 500 to the browser.
+ *
+ * Carries:
+ *  - `code`: stable identifier from `EmailConnectErrorCode` (lib/errors.ts) that the web
+ *    client maps to friendly copy. Never reused for a different meaning.
+ *  - `cause`: the original error, for log context. Never shown to the user.
+ */
+export class EmailConnectError extends Error {
+	readonly code: string;
+
+	constructor(code: string, message?: string, options?: { cause?: unknown }) {
+		super(message ?? code, options);
+		this.name = 'EmailConnectError';
+		this.code = code;
+	}
+}

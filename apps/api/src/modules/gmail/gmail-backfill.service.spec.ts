@@ -23,19 +23,14 @@ interface FakePrisma {
 	};
 }
 
-function makePrisma(
-	emailAccountRow: object | null,
-	existingRawIds: string[] = []
-): FakePrisma {
+function makePrisma(emailAccountRow: object | null, existingRawIds: string[] = []): FakePrisma {
 	return {
 		emailAccount: {
 			findUnique: jest.fn().mockReturnValue(Promise.resolve(emailAccountRow)),
 			update: jest.fn().mockReturnValue(Promise.resolve({}))
 		},
 		rawMessage: {
-			findMany: jest
-				.fn()
-				.mockReturnValue(Promise.resolve(existingRawIds.map(id => ({ providerMessageId: id })))),
+			findMany: jest.fn().mockReturnValue(Promise.resolve(existingRawIds.map(id => ({ providerMessageId: id })))),
 			createMany: jest.fn().mockImplementation((args: unknown) => {
 				const data = (args as { data: unknown[] }).data;
 				return Promise.resolve({ count: data.length });
@@ -65,10 +60,7 @@ interface MessageStub {
 	internalMs?: number;
 }
 
-function makeApi(opts: {
-	pages: ReadonlyArray<ReadonlyArray<MessageStub>>;
-	historyId?: string;
-}): GmailApiService {
+function makeApi(opts: { pages: ReadonlyArray<ReadonlyArray<MessageStub>>; historyId?: string }): GmailApiService {
 	const pageIterator = opts.pages.values();
 	const pageList = jest.fn().mockImplementation(() => {
 		const next = pageIterator.next();
@@ -164,7 +156,12 @@ describe('GmailBackfillService.run', () => {
 			],
 			historyId: 'history-99'
 		});
-		const service = new GmailBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new GmailBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 
@@ -190,7 +187,12 @@ describe('GmailBackfillService.run', () => {
 				[{ id: 'g-3', threadId: 't-3', subject: 'C' }]
 			]
 		});
-		const service = new GmailBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new GmailBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 
@@ -210,14 +212,21 @@ describe('GmailBackfillService.run', () => {
 				]
 			]
 		});
-		const service = new GmailBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new GmailBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 
 		expect(result.messagesInserted).toBe(1);
 		expect(result.messagesSkipped).toBe(2);
 		// `createMany` was called with only the new message.
-		const insertCall = prisma.rawMessage.createMany.mock.calls[0]?.[0] as { data: Array<{ providerMessageId: string }> };
+		const insertCall = prisma.rawMessage.createMany.mock.calls[0]?.[0] as {
+			data: Array<{ providerMessageId: string }>;
+		};
 		expect(insertCall.data.map(d => d.providerMessageId)).toEqual(['g-2']);
 	});
 
@@ -235,7 +244,12 @@ describe('GmailBackfillService.run', () => {
 				]
 			]
 		});
-		const service = new GmailBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new GmailBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		await service.run('ea-1');
 
@@ -251,11 +265,14 @@ describe('GmailBackfillService.run', () => {
 	it('parses bare From header without display name', async () => {
 		const prisma = makePrisma(SCOPE_ROW, []);
 		const api = makeApi({
-			pages: [
-				[{ id: 'g-1', threadId: 't-1', subject: 'Test', from: 'lone@example.com' }]
-			]
+			pages: [[{ id: 'g-1', threadId: 't-1', subject: 'Test', from: 'lone@example.com' }]]
 		});
-		const service = new GmailBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new GmailBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		await service.run('ea-1');
 
@@ -273,7 +290,12 @@ describe('GmailBackfillService.run', () => {
 		const api = makeApi({
 			pages: [[{ id: 'g-1', threadId: 't-1', subject: 'No sender' }]]
 		});
-		const service = new GmailBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new GmailBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		await service.run('ea-1');
 
@@ -286,7 +308,12 @@ describe('GmailBackfillService.run', () => {
 	it('handles a zero-message inbox without crashing', async () => {
 		const prisma = makePrisma(SCOPE_ROW, []);
 		const api = makeApi({ pages: [[]] });
-		const service = new GmailBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new GmailBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 

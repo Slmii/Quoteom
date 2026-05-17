@@ -277,12 +277,7 @@ function formatPaymentMethod(brand: string): string {
 	return brand.charAt(0).toUpperCase() + brand.slice(1);
 }
 
-const SUBSCRIBE_STATES: ReadonlyArray<BillingStatus['state']> = [
-	'none',
-	'canceled',
-	'incomplete_expired',
-	'unpaid'
-];
+const SUBSCRIBE_STATES: ReadonlyArray<BillingStatus['state']> = ['none', 'canceled', 'incomplete_expired', 'unpaid'];
 
 function shouldShowSubscribe(status: BillingStatus): boolean {
 	return SUBSCRIBE_STATES.includes(status.state);

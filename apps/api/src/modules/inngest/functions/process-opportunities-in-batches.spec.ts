@@ -34,7 +34,10 @@ function emptyResult(emailAccountId: string): OpportunityProcessingResult {
 	};
 }
 
-function batchResult(overrides: Partial<OpportunityProcessingResult>, opts: { exhausted: boolean; failedRawMessageIds?: string[] }): OpportunityProcessingBatchResult {
+function batchResult(
+	overrides: Partial<OpportunityProcessingResult>,
+	opts: { exhausted: boolean; failedRawMessageIds?: string[] }
+): OpportunityProcessingBatchResult {
 	return {
 		result: { ...emptyResult('acct-1'), ...overrides },
 		failedRawMessageIds: opts.failedRawMessageIds ?? [],
@@ -49,9 +52,21 @@ describe('processOpportunitiesInBatches', () => {
 		const { step, calls } = makeStep();
 		const processBatch = jest
 			.fn<OpportunitiesService['processBatch']>()
-			.mockResolvedValueOnce(batchResult({ scanned: 25, classifiedPositive: 20, opportunitiesCreated: 20 }, { exhausted: false }))
-			.mockResolvedValueOnce(batchResult({ scanned: 25, classifiedPositive: 10, classifiedNegative: 15, opportunitiesCreated: 10 }, { exhausted: false }))
-			.mockResolvedValueOnce(batchResult({ scanned: 7, classifiedPositive: 3, classifiedNegative: 4, opportunitiesCreated: 3 }, { exhausted: true }));
+			.mockResolvedValueOnce(
+				batchResult({ scanned: 25, classifiedPositive: 20, opportunitiesCreated: 20 }, { exhausted: false })
+			)
+			.mockResolvedValueOnce(
+				batchResult(
+					{ scanned: 25, classifiedPositive: 10, classifiedNegative: 15, opportunitiesCreated: 10 },
+					{ exhausted: false }
+				)
+			)
+			.mockResolvedValueOnce(
+				batchResult(
+					{ scanned: 7, classifiedPositive: 3, classifiedNegative: 4, opportunitiesCreated: 3 },
+					{ exhausted: true }
+				)
+			);
 
 		const aggregate = await processOpportunitiesInBatches({
 			step,
@@ -59,7 +74,8 @@ describe('processOpportunitiesInBatches', () => {
 			logService,
 			emailAccountId: 'acct-1',
 			stepNamePrefix: 'test-batch',
-			logContext: 'TestFn'
+			logContext: 'TestFn',
+			correlation: { requestId: 'test-run' }
 		});
 
 		expect(processBatch).toHaveBeenCalledTimes(3);
@@ -77,7 +93,9 @@ describe('processOpportunitiesInBatches', () => {
 		const { step } = makeStep();
 		const processBatch = jest
 			.fn<OpportunitiesService['processBatch']>()
-			.mockResolvedValueOnce(batchResult({ scanned: 1, failed: 1 }, { exhausted: false, failedRawMessageIds: ['raw-1'] }))
+			.mockResolvedValueOnce(
+				batchResult({ scanned: 1, failed: 1 }, { exhausted: false, failedRawMessageIds: ['raw-1'] })
+			)
 			.mockResolvedValueOnce(batchResult({ scanned: 0 }, { exhausted: true }));
 
 		await processOpportunitiesInBatches({
@@ -86,7 +104,8 @@ describe('processOpportunitiesInBatches', () => {
 			logService,
 			emailAccountId: 'acct-1',
 			stepNamePrefix: 'test-batch',
-			logContext: 'TestFn'
+			logContext: 'TestFn',
+			correlation: { requestId: 'test-run' }
 		});
 
 		expect(processBatch).toHaveBeenNthCalledWith(1, 'acct-1', []);
@@ -107,7 +126,8 @@ describe('processOpportunitiesInBatches', () => {
 			logService: warnLogger,
 			emailAccountId: 'acct-1',
 			stepNamePrefix: 'test-batch',
-			logContext: 'TestFn'
+			logContext: 'TestFn',
+			correlation: { requestId: 'test-run' }
 		});
 
 		expect(processBatch).toHaveBeenCalledTimes(PROCESS_MAX_BATCHES_PER_RUN);

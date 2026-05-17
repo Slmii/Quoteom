@@ -139,7 +139,6 @@ export class MicrosoftGraphApiService {
 		});
 	}
 
-
 	/**
 	 * List the N most recent inbox messages (W3.2 smoke). Uses `$top` + `$select` to
 	 * pull only the fields we need for the smoke list.
@@ -261,10 +260,7 @@ export class MicrosoftGraphApiService {
 	 * back within ~5 seconds. The webhook handler MUST short-circuit on that query param
 	 * before any auth/parsing logic, or subscription creation fails outright with 400 here.
 	 */
-	async createSubscription(
-		accessToken: string,
-		params: CreateSubscriptionParams
-	): Promise<MicrosoftSubscription> {
+	async createSubscription(accessToken: string, params: CreateSubscriptionParams): Promise<MicrosoftSubscription> {
 		const url = `${MICROSOFT_GRAPH_BASE}/subscriptions`;
 		const body = {
 			changeType: 'created',

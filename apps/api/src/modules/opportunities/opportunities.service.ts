@@ -6,7 +6,10 @@ import { OPPORTUNITY_NOT_FOUND, invalidOpportunityStatusTransition } from '@/lib
 import { LogService } from '@/modules/logger/log.service';
 import { OpportunityListResponseDto } from '@/modules/opportunities/dto/opportunity-list.response.dto';
 import { OpportunityResponseDto } from '@/modules/opportunities/dto/opportunity.response.dto';
-import { decodeOpportunityListCursor, encodeOpportunityListCursor } from '@/modules/opportunities/opportunity-list-cursor';
+import {
+	decodeOpportunityListCursor,
+	encodeOpportunityListCursor
+} from '@/modules/opportunities/opportunity-list-cursor';
 import {
 	OPPORTUNITY_STATUS_FROM_WIRE,
 	OPPORTUNITY_STATUS_TO_WIRE,
@@ -35,6 +38,13 @@ import type { OpportunityStatus as WireOpportunityStatus } from '@quoteom/shared
 // `step.run`, so a backfill that scans hundreds of rows survives partial failures and
 // per-step retries without losing prior progress.
 const PROCESS_BATCH_SIZE = 25;
+
+// In-batch parallelism for the classify-then-extract work. Picked to stay well under
+// gpt-4o's 30k-TPM default tier: the extractor burns ~2k tokens/call, so 5 concurrent
+// extractions ≈ 10k tokens in flight — safe with margin for the SDK's retries. Higher
+// values are faster but risk 429s the SDK can't ride through. Lower values are slower
+// but never matter — we'd just be the limit instead of OpenAI.
+const PROCESS_BATCH_CONCURRENCY = 5;
 
 const LIST_DEFAULT_PAGE_SIZE = 25;
 const LIST_MAX_PAGE_SIZE = 100;
@@ -75,7 +85,8 @@ export class OpportunitiesService {
 		const hasMore = rows.length > limit;
 		const page = hasMore ? rows.slice(0, limit) : rows;
 		const last = page[page.length - 1];
-		const nextCursor = hasMore && last ? encodeOpportunityListCursor({ createdAt: last.createdAt, id: last.id }) : null;
+		const nextCursor =
+			hasMore && last ? encodeOpportunityListCursor({ createdAt: last.createdAt, id: last.id }) : null;
 
 		return {
 			opportunities: page.map(toOpportunityResponseDto),
@@ -186,10 +197,19 @@ export class OpportunitiesService {
 			return { result, failedRawMessageIds: [], exhausted: true };
 		}
 
+		// Chunked parallel: each chunk runs `PROCESS_BATCH_CONCURRENCY` messages in
+		// parallel through `processOneRawMessage`, which mutates `result` + the failed-id
+		// set in-place (single-threaded JS makes the `+= 1` and `Set.add` effectively
+		// atomic, so no race on the shared state). Short-circuit on AINotConfigured
+		// happens at chunk boundaries — a few in-flight calls may complete after the
+		// terminal error, but their results are already accounted for in `result`.
 		let aiNotConfigured = false;
-		for (const rawMessage of rawMessages) {
-			const shouldContinue = await this.processOneRawMessage(rawMessage, result, failedRawMessageIds);
-			if (!shouldContinue) {
+		for (let i = 0; i < rawMessages.length; i += PROCESS_BATCH_CONCURRENCY) {
+			const slice = rawMessages.slice(i, i + PROCESS_BATCH_CONCURRENCY);
+			const outcomes = await Promise.all(
+				slice.map(rawMessage => this.processOneRawMessage(rawMessage, result, failedRawMessageIds))
+			);
+			if (outcomes.some(shouldContinue => !shouldContinue)) {
 				aiNotConfigured = true;
 				break;
 			}
@@ -227,10 +247,7 @@ export class OpportunitiesService {
 				return true;
 			}
 
-			const extraction = await this.extractor.extract(
-				input,
-				rawMessage.internalDate.toISOString().slice(0, 10)
-			);
+			const extraction = await this.extractor.extract(input, rawMessage.internalDate.toISOString().slice(0, 10));
 			const created = await this.repository.createOpportunityFromRawMessage({
 				rawMessage,
 				classification: classification.value,

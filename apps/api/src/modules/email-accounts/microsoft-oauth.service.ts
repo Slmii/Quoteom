@@ -1,11 +1,11 @@
 import type { EnvSchema } from '@/config/env.schema';
 import {
 	buildMicrosoftAdminConsentUrl,
+	EmailConnectErrorCode,
 	MICROSOFT_OAUTH_NOT_CONFIGURED,
-	OAUTH_TOKEN_EXCHANGE_FAILED,
-	OAUTH_USERINFO_FAILED
+	OAUTH_TOKEN_EXCHANGE_FAILED
 } from '@/lib/errors';
-import { OAuthRefreshTokenInvalidException } from '@/lib/oauth/oauth-errors';
+import { EmailConnectError, OAuthRefreshTokenInvalidException } from '@/lib/oauth/oauth-errors';
 import { LogService } from '@/modules/logger/log.service';
 import {
 	MICROSOFT_GRAPH_BASE,
@@ -129,14 +129,20 @@ export class MicrosoftOAuthService {
 
 		if (!response.ok) {
 			const text = await response.text();
+			// AADSTS70000: "The provided value for the 'code' parameter is not valid" —
+			// the code was already redeemed, expired, or issued for a different client.
+			// In all three cases the user can recover by re-starting the connect flow,
+			// so we surface it as a distinct UI message (`oauth_code_invalid`).
+			const isCodeInvalid = /AADSTS70000/.test(text);
+			const code = isCodeInvalid ? EmailConnectErrorCode.CodeReused : EmailConnectErrorCode.TokenExchangeFailed;
 			this.logService.logAction({
 				action: 'oauth.microsoft.token_exchange_failed',
 				message: `Microsoft token exchange failed: HTTP ${response.status}`,
-				metadata: { status: response.status, body: text.slice(0, 500) },
+				metadata: { status: response.status, body: text.slice(0, 500), code },
 				level: 'error',
 				context: 'MicrosoftOAuthService'
 			});
-			throw new InternalServerErrorException(OAUTH_TOKEN_EXCHANGE_FAILED);
+			throw new EmailConnectError(code, `Microsoft token exchange failed (HTTP ${response.status})`);
 		}
 
 		const data = (await response.json()) as {
@@ -224,7 +230,15 @@ export class MicrosoftOAuthService {
 		});
 
 		if (!response.ok) {
-			throw new InternalServerErrorException(OAUTH_USERINFO_FAILED);
+			const text = await response.text().catch(() => '');
+			this.logService.logAction({
+				action: 'oauth.microsoft.userinfo_failed',
+				message: `Microsoft /me failed: HTTP ${response.status}`,
+				metadata: { status: response.status, body: text.slice(0, 500) },
+				level: 'error',
+				context: 'MicrosoftOAuthService'
+			});
+			throw new EmailConnectError(EmailConnectErrorCode.UserInfoFailed);
 		}
 
 		return (await response.json()) as MicrosoftUserInfo;

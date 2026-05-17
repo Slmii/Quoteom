@@ -26,9 +26,7 @@ function makeBilling(state: string): BillingService {
 
 /** Reach into the private `assertSeatBudget` method for focused testing. */
 async function callAssertSeatBudget(service: InvitationsService, organizationId: string): Promise<void> {
-	await (
-		service as unknown as { assertSeatBudget(id: string): Promise<void> }
-	).assertSeatBudget(organizationId);
+	await (service as unknown as { assertSeatBudget(id: string): Promise<void> }).assertSeatBudget(organizationId);
 }
 
 describe('InvitationsService.assertSeatBudget', () => {
@@ -49,7 +47,12 @@ describe('InvitationsService.assertSeatBudget', () => {
 			'%s skips the seat check entirely (no Prisma calls)',
 			async state => {
 				const billing = makeBilling(state);
-				const service = new InvitationsService(prisma as unknown as PrismaService, config, billing, logServiceStub);
+				const service = new InvitationsService(
+					prisma as unknown as PrismaService,
+					config,
+					billing,
+					logServiceStub
+				);
 
 				await expect(callAssertSeatBudget(service, 'org-1')).resolves.toBeUndefined();
 				expect(prisma.membership.count).not.toHaveBeenCalled();

@@ -16,11 +16,7 @@ import type { InngestFunction } from 'inngest';
 export class MicrosoftDeltaSyncFunction {
 	readonly inngestFn: InngestFunction.Any;
 
-	constructor(
-		deltaSync: MicrosoftDeltaSyncService,
-		opportunities: OpportunitiesService,
-		logService: LogService
-	) {
+	constructor(deltaSync: MicrosoftDeltaSyncService, opportunities: OpportunitiesService, logService: LogService) {
 		this.inngestFn = defineMailboxPipelineFunction({
 			functionId: InngestFunctionIds.MicrosoftDeltaSync,
 			functionName: 'Microsoft delta sync (push notification)',

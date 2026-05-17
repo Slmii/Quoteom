@@ -25,23 +25,25 @@ export const getGmailStatusServer = createServerFn({ method: 'GET' }).handler(as
 	return (await response.json()) as MailboxStatus;
 });
 
-export const getGmailMessagesServer = createServerFn({ method: 'GET' }).handler(async (): Promise<GmailMessagesView> => {
-	const response = await serverFetch('/api/email/gmail/messages');
-	if (!response.ok) {
-		// 404: either the user never connected, OR `withFreshAccessToken` just self-healed
-		// a revoked account away mid-request. Either way we render the same UI — surface
-		// the `disconnected: true` flag so the page can reconcile with a stale-but-cached
-		// "connected" status response.
-		if (response.status === 404) {
-			return { messages: [], disconnected: true };
+export const getGmailMessagesServer = createServerFn({ method: 'GET' }).handler(
+	async (): Promise<GmailMessagesView> => {
+		const response = await serverFetch('/api/email/gmail/messages');
+		if (!response.ok) {
+			// 404: either the user never connected, OR `withFreshAccessToken` just self-healed
+			// a revoked account away mid-request. Either way we render the same UI — surface
+			// the `disconnected: true` flag so the page can reconcile with a stale-but-cached
+			// "connected" status response.
+			if (response.status === 404) {
+				return { messages: [], disconnected: true };
+			}
+
+			throw new Error(`Failed to load Gmail messages (${response.status})`);
 		}
 
-		throw new Error(`Failed to load Gmail messages (${response.status})`);
+		const data = (await response.json()) as { messages: GmailMessage[] };
+		return { messages: data.messages, disconnected: false };
 	}
-
-	const data = (await response.json()) as { messages: GmailMessage[] };
-	return { messages: data.messages, disconnected: false };
-});
+);
 
 export const getMicrosoftStatusServer = createServerFn({ method: 'GET' }).handler(async (): Promise<MailboxStatus> => {
 	const response = await serverFetch('/api/email/microsoft/status');

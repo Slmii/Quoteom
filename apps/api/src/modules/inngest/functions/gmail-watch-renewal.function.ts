@@ -28,7 +28,9 @@ export class GmailWatchRenewalFunction {
 				retries: 3
 			},
 			async ({ step }) => {
-				const result = await step.run(InngestSteps.GmailWatchRenewal.Renew, () => this.watch.renewExpiringWatches());
+				const result = await step.run(InngestSteps.GmailWatchRenewal.Renew, () =>
+					this.watch.renewExpiringWatches()
+				);
 				return result;
 			}
 		);

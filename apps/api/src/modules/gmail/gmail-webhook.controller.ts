@@ -73,10 +73,7 @@ export class GmailWebhookController {
 	@SkipThrottle()
 	@HttpCode(HttpStatus.NO_CONTENT)
 	@Post()
-	async receive(
-		@Req() request: Request,
-		@Headers('authorization') authorization: string | undefined
-	): Promise<void> {
+	async receive(@Req() request: Request, @Headers('authorization') authorization: string | undefined): Promise<void> {
 		const audience = this.config.get('GOOGLE_PUBSUB_AUDIENCE', { infer: true });
 		const serviceAccount = this.config.get('GOOGLE_PUBSUB_SERVICE_ACCOUNT', { infer: true });
 
@@ -154,7 +151,7 @@ export class GmailWebhookController {
 			try {
 				await inngest.send({
 					name: InngestEvents.GmailHistoryChanged,
-					data: { emailAccountId: account.id }
+					data: { emailAccountId: account.id, organizationId: account.organizationId }
 				});
 				this.logService.logAction({
 					action: 'gmail.webhook.received',
@@ -200,7 +197,10 @@ function decodeNotification(data: string): GmailNotificationPayload | null {
 	try {
 		const decoded = Buffer.from(data, 'base64').toString('utf8');
 		const parsed = JSON.parse(decoded) as GmailNotificationPayload;
-		if (typeof parsed.emailAddress !== 'string' || (typeof parsed.historyId !== 'string' && typeof parsed.historyId !== 'number')) {
+		if (
+			typeof parsed.emailAddress !== 'string' ||
+			(typeof parsed.historyId !== 'string' && typeof parsed.historyId !== 'number')
+		) {
 			return null;
 		}
 		return parsed;

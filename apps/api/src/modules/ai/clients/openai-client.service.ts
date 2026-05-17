@@ -128,11 +128,9 @@ export class OpenAIClient implements AIClient {
 			}
 
 			if (response.output_parsed === null || response.output_parsed === undefined) {
-				const err = new AISchemaInvalidError(
-					`${provider} returned no parsed content`,
-					rawText ?? '',
-					{ noParsed: true }
-				);
+				const err = new AISchemaInvalidError(`${provider} returned no parsed content`, rawText ?? '', {
+					noParsed: true
+				});
 				await this.logger.record({
 					provider,
 					model,

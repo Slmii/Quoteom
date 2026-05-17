@@ -333,7 +333,9 @@ export class BillingService {
 				newStatus: sub.status,
 				cancelAtPeriodEnd: sub.cancel_at_period_end,
 				seatCount: item?.quantity ?? null,
-				currentPeriodEnd: item?.current_period_end ? new Date(item.current_period_end * 1000).toISOString() : null
+				currentPeriodEnd: item?.current_period_end
+					? new Date(item.current_period_end * 1000).toISOString()
+					: null
 			},
 			context: 'BillingService'
 		});

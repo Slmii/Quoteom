@@ -25,9 +25,7 @@ function makePrisma(emailAccountRow: object | null, existingRawIds: string[] = [
 			findUnique: jest.fn().mockReturnValue(Promise.resolve(emailAccountRow))
 		},
 		rawMessage: {
-			findMany: jest
-				.fn()
-				.mockReturnValue(Promise.resolve(existingRawIds.map(id => ({ providerMessageId: id })))),
+			findMany: jest.fn().mockReturnValue(Promise.resolve(existingRawIds.map(id => ({ providerMessageId: id })))),
 			createMany: jest.fn().mockImplementation((args: unknown) => {
 				const data = (args as { data: unknown[] }).data;
 				return Promise.resolve({ count: data.length });
@@ -68,9 +66,7 @@ function makeApi(opts: { pages: ReadonlyArray<ReadonlyArray<MessageStub>> }): Mi
 				subject: m.subject,
 				receivedDateTime: m.receivedIso ?? '2026-05-01T10:00:00Z',
 				bodyPreview: '',
-				from: m.fromAddr
-					? { emailAddress: { name: m.fromName ?? null, address: m.fromAddr } }
-					: null
+				from: m.fromAddr ? { emailAddress: { name: m.fromName ?? null, address: m.fromAddr } } : null
 			})),
 			nextLink: isLast ? null : `https://graph.microsoft.com/...skip${next.value[0]?.id}`
 		});
@@ -139,7 +135,12 @@ describe('MicrosoftBackfillService.run', () => {
 				]
 			]
 		});
-		const service = new MicrosoftBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new MicrosoftBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 		expect(result.messagesInserted).toBe(2);
@@ -155,7 +156,12 @@ describe('MicrosoftBackfillService.run', () => {
 				[{ id: 'm-3', conversationId: 'c-3', subject: 'C' }]
 			]
 		});
-		const service = new MicrosoftBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new MicrosoftBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 		expect(result.pagesFetched).toBe(3);
@@ -173,7 +179,12 @@ describe('MicrosoftBackfillService.run', () => {
 				]
 			]
 		});
-		const service = new MicrosoftBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new MicrosoftBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 		expect(result.messagesInserted).toBe(1);
@@ -199,7 +210,12 @@ describe('MicrosoftBackfillService.run', () => {
 				]
 			]
 		});
-		const service = new MicrosoftBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new MicrosoftBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		await service.run('ea-1');
 		const insertCall = prisma.rawMessage.createMany.mock.calls[0]?.[0] as {
@@ -214,7 +230,12 @@ describe('MicrosoftBackfillService.run', () => {
 		const api = makeApi({
 			pages: [[{ id: 'm-1', conversationId: 'c-1', subject: 'No sender' }]]
 		});
-		const service = new MicrosoftBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new MicrosoftBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		await service.run('ea-1');
 		const insertCall = prisma.rawMessage.createMany.mock.calls[0]?.[0] as {
@@ -226,7 +247,12 @@ describe('MicrosoftBackfillService.run', () => {
 	it('handles a zero-message inbox without crashing', async () => {
 		const prisma = makePrisma(SCOPE_ROW, []);
 		const api = makeApi({ pages: [[]] });
-		const service = new MicrosoftBackfillService(prisma as unknown as PrismaService, makeAccounts(), api, logServiceStub);
+		const service = new MicrosoftBackfillService(
+			prisma as unknown as PrismaService,
+			makeAccounts(),
+			api,
+			logServiceStub
+		);
 
 		const result = await service.run('ea-1');
 		expect(result.pagesFetched).toBe(1);

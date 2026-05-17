@@ -52,14 +52,18 @@ function makePrisma(rows: ReadonlyArray<AccountSeed>): FakePrisma {
 					subscriptionClientState: encrypt('shared-secret-known')
 				});
 			}),
-			findMany: jest.fn().mockReturnValue(Promise.resolve(rows.map(r => ({
-				id: r.id,
-				subscriptionId: r.subscriptionId ?? null,
-				organizationId: 'org-1',
-				userId: 'user-1',
-				email: `${r.id}@quoteom.dev`,
-				provider: EmailProvider.MICROSOFT
-			})))),
+			findMany: jest.fn().mockReturnValue(
+				Promise.resolve(
+					rows.map(r => ({
+						id: r.id,
+						subscriptionId: r.subscriptionId ?? null,
+						organizationId: 'org-1',
+						userId: 'user-1',
+						email: `${r.id}@quoteom.dev`,
+						provider: EmailProvider.MICROSOFT
+					}))
+				)
+			),
 			update: jest.fn().mockReturnValue(Promise.resolve({})),
 			updateMany: jest.fn().mockReturnValue(Promise.resolve({ count: 1 }))
 		}
@@ -76,14 +80,18 @@ function makeAccounts(): EmailAccountsService {
 
 function makeApi(overrides: Partial<MicrosoftGraphApiService> = {}): MicrosoftGraphApiService {
 	return {
-		createSubscription: jest.fn().mockImplementation(() => Promise.resolve({
-			id: 'sub-new',
-			expirationDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
-		})),
-		renewSubscription: jest.fn().mockImplementation(() => Promise.resolve({
-			id: 'sub-existing',
-			expirationDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
-		})),
+		createSubscription: jest.fn().mockImplementation(() =>
+			Promise.resolve({
+				id: 'sub-new',
+				expirationDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+			})
+		),
+		renewSubscription: jest.fn().mockImplementation(() =>
+			Promise.resolve({
+				id: 'sub-existing',
+				expirationDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+			})
+		),
 		deleteSubscription: jest.fn().mockReturnValue(Promise.resolve()),
 		...overrides
 	} as unknown as MicrosoftGraphApiService;
@@ -263,18 +271,16 @@ describe('MicrosoftSubscriptionService.renewExpiringSubscriptions', () => {
 		]);
 		let calls = 0;
 		const api = makeApi({
-			renewSubscription: jest
-				.fn<MicrosoftGraphApiService['renewSubscription']>()
-				.mockImplementation((_t, id) => {
-					calls += 1;
-					if (id === 'sub-bad') {
-						return Promise.reject(new Error('graph-bad-request'));
-					}
-					return Promise.resolve({
-						id: id as string,
-						expirationDateTime: new Date(Date.now() + 1000).toISOString()
-					});
-				})
+			renewSubscription: jest.fn<MicrosoftGraphApiService['renewSubscription']>().mockImplementation((_t, id) => {
+				calls += 1;
+				if (id === 'sub-bad') {
+					return Promise.reject(new Error('graph-bad-request'));
+				}
+				return Promise.resolve({
+					id: id as string,
+					expirationDateTime: new Date(Date.now() + 1000).toISOString()
+				});
+			})
 		});
 		const service = new MicrosoftSubscriptionService(
 			prisma as unknown as PrismaService,

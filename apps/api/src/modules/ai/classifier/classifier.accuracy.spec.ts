@@ -119,12 +119,8 @@ describeIfKey('ClassifierService — live OpenAI accuracy', () => {
 			const conf = r.result?.confidence;
 			const reason = r.result?.reason ?? r.error ?? '(no reason)';
 			const mark = r.correct ? '✅' : '❌';
-			console.log(
-				`${mark} [${r.fixture.category.padEnd(8)}] "${r.fixture.input.subject}"`
-			);
-			console.log(
-				`     expected=${expected}  got=${got}  conf=${conf !== undefined ? conf.toFixed(2) : 'n/a'}`
-			);
+			console.log(`${mark} [${r.fixture.category.padEnd(8)}] "${r.fixture.input.subject}"`);
+			console.log(`     expected=${expected}  got=${got}  conf=${conf !== undefined ? conf.toFixed(2) : 'n/a'}`);
 			console.log(`     reason: ${reason}`);
 		}
 

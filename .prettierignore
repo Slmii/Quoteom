@@ -16,3 +16,4 @@ apps/web/src/routeTree.gen.ts
 
 # Lockfiles
 package-lock.json
+pnpm-lock.yaml

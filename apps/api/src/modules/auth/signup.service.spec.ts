@@ -10,17 +10,14 @@ interface FakePrisma {
 	$transaction: jest.Mock;
 }
 
-function makePrisma(opts: {
-	existingUser?: { id: string } | null;
-	createdOrgId?: string;
-	createdUserId?: string;
-}): { prisma: FakePrisma; tx: { organization: { create: jest.Mock }; user: { create: jest.Mock }; membership: { create: jest.Mock } } } {
+function makePrisma(opts: { existingUser?: { id: string } | null; createdOrgId?: string; createdUserId?: string }): {
+	prisma: FakePrisma;
+	tx: { organization: { create: jest.Mock }; user: { create: jest.Mock }; membership: { create: jest.Mock } };
+} {
 	const tx = {
 		organization: { create: jest.fn().mockReturnValue(Promise.resolve({ id: opts.createdOrgId ?? 'org-1' })) },
 		user: {
-			create: jest.fn().mockReturnValue(
-				Promise.resolve({ id: opts.createdUserId ?? 'user-1' })
-			)
+			create: jest.fn().mockReturnValue(Promise.resolve({ id: opts.createdUserId ?? 'user-1' }))
 		},
 		membership: { create: jest.fn().mockReturnValue(Promise.resolve({ id: 'm-1' })) }
 	};

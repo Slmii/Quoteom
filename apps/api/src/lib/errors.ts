@@ -98,6 +98,28 @@ export const OAUTH_STATE_INVALID = 'OAuth state mismatch — possible CSRF, rest
 export const OAUTH_CODE_MISSING = 'OAuth callback is missing the authorization code.';
 export const OAUTH_TOKEN_EXCHANGE_FAILED = 'Failed to exchange OAuth code for tokens.';
 export const OAUTH_USERINFO_FAILED = 'Failed to fetch user info from the OAuth provider.';
+
+/**
+ * Stable error codes the OAuth callback handlers redirect to
+ * `/settings/email?error=<code>` with. Web client maps each to friendly UI copy in
+ * `apps/web/src/lib/utils/email-connect-error.ts`. Never reuse a code for a different
+ * meaning — clients in the wild may have URLs pointing at any historical value.
+ *
+ * Naming: lowercase snake-ish (`<area>_<reason>`), provider-prefixed only when the
+ * cause is provider-specific (e.g. `microsoft_admin_consent_required`).
+ */
+export const EmailConnectErrorCode = {
+	StateMismatch: 'oauth_state_mismatch',
+	CodeMissing: 'oauth_code_missing',
+	CodeReused: 'oauth_code_invalid',
+	TokenExchangeFailed: 'oauth_token_exchange_failed',
+	UserInfoFailed: 'oauth_userinfo_failed',
+	ProviderRejected: 'oauth_provider_rejected',
+	NotConfigured: 'oauth_provider_misconfigured',
+	Unknown: 'oauth_unknown_error'
+} as const;
+
+export type EmailConnectErrorCode = (typeof EmailConnectErrorCode)[keyof typeof EmailConnectErrorCode];
 export const EMAIL_ACCOUNT_NOT_FOUND = 'No connected mail account for this organization.';
 // Dev-facing — surfaced as generic 500 when a Gmail or Graph API endpoint returns non-2xx.
 export const GMAIL_API_CALL_FAILED = (operation: string) => `Gmail API ${operation} failed`;

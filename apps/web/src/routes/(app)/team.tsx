@@ -69,8 +69,7 @@ function TeamPage() {
 	// Mirror the API's EntitlementGuard set. Any state outside this list will 402 at
 	// submission time, so disable the invite form proactively. A brand-new org with
 	// state='none' falls into the disabled branch — they need to Checkout first.
-	const billingEntitled =
-		status.state === 'trialing' || status.state === 'active' || status.state === 'past_due';
+	const billingEntitled = status.state === 'trialing' || status.state === 'active' || status.state === 'past_due';
 
 	const handleSubmit = (event: React.FormEvent) => {
 		event.preventDefault();
@@ -150,9 +149,7 @@ function TeamPage() {
 
 				{removeMember.error && (
 					<Alert severity='error' sx={{ mb: 2 }}>
-						{removeMember.error instanceof Error
-							? removeMember.error.message
-							: 'Could not remove member.'}
+						{removeMember.error instanceof Error ? removeMember.error.message : 'Could not remove member.'}
 					</Alert>
 				)}
 

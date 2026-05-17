@@ -84,7 +84,7 @@ export class MeController {
 	 * just refetches after the mutation. `ParseUUIDPipe` rejects garbage path params at
 	 * the framework layer before the service runs.
 	 */
-	@ApiOperation({ summary: "Remove a member from the active organization (owner-only)" })
+	@ApiOperation({ summary: 'Remove a member from the active organization (owner-only)' })
 	@ApiNoContentResponse()
 	@UseGuards(OwnerGuard)
 	@HttpCode(HttpStatus.NO_CONTENT)

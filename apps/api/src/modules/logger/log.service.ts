@@ -91,12 +91,14 @@ export class LogService extends ConsoleLogger {
 				break;
 		}
 
-		const persistLevel: PrismaLogLevel = ({
-			fatal: 'FATAL',
-			error: 'ERROR',
-			warn: 'WARN',
-			log: 'INFO'
-		} as const)[level];
+		const persistLevel: PrismaLogLevel = (
+			{
+				fatal: 'FATAL',
+				error: 'ERROR',
+				warn: 'WARN',
+				log: 'INFO'
+			} as const
+		)[level];
 		const metadata: Record<string, unknown> = { action: entry.action, ...(entry.metadata ?? {}) };
 		void this.persist(persistLevel, entry.message, { context, metadata, stack: entry.stack });
 	}

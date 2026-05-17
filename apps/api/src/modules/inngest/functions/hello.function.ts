@@ -26,10 +26,7 @@ export const helloFn: InngestFunction.Any = inngest.createFunction(
 	async ({ event, step }) => {
 		const recipient = (event.data as { name?: string }).name ?? 'world';
 		// Wrap in step.run so the return value is captured + replayable in the UI.
-		const greeting = await step.run(
-			InngestSteps.Hello.ComposeGreeting,
-			() => `Hello, ${recipient}!`
-		);
+		const greeting = await step.run(InngestSteps.Hello.ComposeGreeting, () => `Hello, ${recipient}!`);
 		logger.log(`hello fn fired: ${greeting}`);
 		return { greeting };
 	}

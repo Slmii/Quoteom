@@ -3,19 +3,20 @@ import { TenantMemberGuard } from '@/common/guards/tenant-member.guard';
 import type { EnvSchema } from '@/config/env.schema';
 import { EmailProvider } from '@/generated/prisma/enums';
 import { isOrganizationEntitled } from '@/lib/billing/entitlement-check';
-import { NOT_AUTHENTICATED, OAUTH_CODE_MISSING, OAUTH_STATE_INVALID } from '@/lib/errors';
+import { EmailConnectErrorCode, NOT_AUTHENTICATED } from '@/lib/errors';
+import { EmailConnectError } from '@/lib/oauth/oauth-errors';
 import { issueOAuthState, verifyOAuthState } from '@/lib/oauth/signed-state';
-import { PrismaService } from '@/modules/prisma/prisma.service';
+import { EmailAccountsService, type MailboxScope } from '@/modules/email-accounts/email-accounts.service';
+import { GoogleOAuthService } from '@/modules/email-accounts/google-oauth.service';
 import { GmailDisconnectResponseDto } from '@/modules/gmail/dto/disconnect.response.dto';
 import { GmailMessageDto, GmailMessagesResponseDto } from '@/modules/gmail/dto/gmail-messages.response.dto';
 import { GmailStatusResponseDto } from '@/modules/gmail/dto/gmail-status.response.dto';
-import { EmailAccountsService, type MailboxScope } from '@/modules/email-accounts/email-accounts.service';
 import { GmailApiService } from '@/modules/gmail/gmail-api.service';
 import { GmailWatchService } from '@/modules/gmail/gmail-watch.service';
 import { GMAIL_STATE_COOKIE } from '@/modules/gmail/gmail.constants';
-import { GoogleOAuthService } from '@/modules/email-accounts/google-oauth.service';
+import { LogService } from '@/modules/logger/log.service';
+import { PrismaService } from '@/modules/prisma/prisma.service';
 import {
-	BadRequestException,
 	Controller,
 	Get,
 	HttpCode,
@@ -81,7 +82,8 @@ export class GmailController {
 		private readonly accounts: EmailAccountsService,
 		private readonly watch: GmailWatchService,
 		private readonly config: ConfigService<EnvSchema, true>,
-		private readonly prisma: PrismaService
+		private readonly prisma: PrismaService,
+		private readonly logService: LogService
 	) {}
 
 	@ApiOperation({ summary: 'Start the Gmail OAuth handshake (redirects to Google).' })
@@ -138,55 +140,79 @@ export class GmailController {
 		response.clearCookie(GMAIL_STATE_COOKIE, { path: '/api/email/gmail/callback' });
 
 		if (error) {
-			response.redirect(`${webOrigin}/settings/email?error=${encodeURIComponent(error)}`);
+			this.logService.logAction({
+				action: 'oauth.google.error',
+				message: `Google callback returned an OAuth error: ${error}`,
+				metadata: { errorCode: error },
+				level: 'warn',
+				context: 'GmailController'
+			});
+			response.redirect(`${webOrigin}/settings/email?error=${EmailConnectErrorCode.ProviderRejected}`);
 			return;
 		}
 
-		if (!code || !state) {
-			throw new BadRequestException(OAUTH_CODE_MISSING);
+		try {
+			if (!code || !state) {
+				throw new EmailConnectError(EmailConnectErrorCode.CodeMissing);
+			}
+
+			const cookieState = readCookie(request, GMAIL_STATE_COOKIE);
+			if (!cookieState || cookieState !== state) {
+				throw new EmailConnectError(EmailConnectErrorCode.StateMismatch);
+			}
+
+			const secret = this.config.get('AUTH_SECRET', { infer: true });
+			const payload = verifyOAuthState(state, secret);
+			if (!payload) {
+				throw new EmailConnectError(EmailConnectErrorCode.StateMismatch);
+			}
+
+			// Cross-check the signed payload against the live session. The guard already
+			// confirmed this user belongs to `request.organizationId`; we additionally
+			// require the connect-initiation org/user to match — defense against a stale
+			// cookie surviving a logout + login as someone else.
+			const { organizationId, userId } = scopeFromRequest(request);
+			if (payload.organizationId !== organizationId || payload.userId !== userId) {
+				throw new EmailConnectError(EmailConnectErrorCode.StateMismatch);
+			}
+
+			// Defense-in-depth: entitlement can lapse between `connect` and `callback` (the user
+			// could cancel their subscription in another tab mid-flow). Stop before we exchange
+			// code → tokens, so we never persist credentials for an unbilled org.
+			if (!(await isOrganizationEntitled(this.prisma, organizationId))) {
+				response.redirect(`${webOrigin}/billing?error=connect_requires_subscription`);
+				return;
+			}
+
+			const tokens = await this.oauth.exchangeCode(code);
+			const userInfo = await this.oauth.fetchUserInfo(tokens.accessToken);
+
+			await this.accounts.upsertEmailAccount({
+				provider: EmailProvider.GMAIL,
+				organizationId,
+				userId,
+				providerAccountId: userInfo.sub,
+				email: userInfo.email,
+				tokens
+			});
+
+			response.redirect(`${webOrigin}/settings/email?connected=1`);
+		} catch (err) {
+			const errorCode = err instanceof EmailConnectError ? err.code : EmailConnectErrorCode.Unknown;
+
+			if (!(err instanceof EmailConnectError)) {
+				this.logService.logAction({
+					action: 'oauth.google.callback_unexpected_error',
+					message: `Google callback failed unexpectedly: ${err instanceof Error ? err.message : 'unknown'}`,
+					metadata: { errorCode },
+					level: 'error',
+					stack: err instanceof Error ? err.stack : undefined,
+					context: 'GmailController'
+				});
+			}
+
+			response.redirect(`${webOrigin}/settings/email?error=${errorCode}`);
 		}
-
-		const cookieState = readCookie(request, GMAIL_STATE_COOKIE);
-		if (!cookieState || cookieState !== state) {
-			throw new BadRequestException(OAUTH_STATE_INVALID);
-		}
-
-		const secret = this.config.get('AUTH_SECRET', { infer: true });
-		const payload = verifyOAuthState(state, secret);
-		if (!payload) {
-			throw new BadRequestException(OAUTH_STATE_INVALID);
-		}
-
-		// Cross-check the signed payload against the live session. The guard already
-		// confirmed this user belongs to `request.organizationId`; we additionally
-		// require the connect-initiation org/user to match — defense against a stale
-		// cookie surviving a logout + login as someone else.
-		const { organizationId, userId } = scopeFromRequest(request);
-		if (payload.organizationId !== organizationId || payload.userId !== userId) {
-			throw new BadRequestException(OAUTH_STATE_INVALID);
-		}
-
-		// Defense-in-depth: entitlement can lapse between `connect` and `callback` (the user
-		// could cancel their subscription in another tab mid-flow). Stop before we exchange
-		// code → tokens, so we never persist credentials for an unbilled org.
-		if (!(await isOrganizationEntitled(this.prisma, organizationId))) {
-			response.redirect(`${webOrigin}/billing?error=connect_requires_subscription`);
-			return;
-		}
-
-		const tokens = await this.oauth.exchangeCode(code);
-		const userInfo = await this.oauth.fetchUserInfo(tokens.accessToken);
-
-		await this.accounts.upsertEmailAccount({
-			provider: EmailProvider.GMAIL,
-			organizationId,
-			userId,
-			providerAccountId: userInfo.sub,
-			email: userInfo.email,
-			tokens
-		});
-
-		response.redirect(`${webOrigin}/settings/email?connected=1`);
 	}
 
 	@ApiOperation({ summary: 'Is THIS user’s Gmail mailbox connected for the active org?' })

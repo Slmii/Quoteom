@@ -55,12 +55,12 @@ function makeService(provider: EmailProvider): {
 	// Attach the fake refresh only to the OAuth service for the provider under test —
 	// the other one must never be invoked. If `oauthFor()` dispatched wrong, the test
 	// would fail loudly with "refreshAccessToken is not a function" on the empty stub.
-	const google = (
-		provider === EmailProvider.GMAIL ? { refreshAccessToken: refreshCalls } : {}
-	) as unknown as GoogleOAuthService;
-	const microsoft = (
-		provider === EmailProvider.MICROSOFT ? { refreshAccessToken: refreshCalls } : {}
-	) as unknown as MicrosoftOAuthService;
+	const google = (provider === EmailProvider.GMAIL
+		? { refreshAccessToken: refreshCalls }
+		: {}) as unknown as GoogleOAuthService;
+	const microsoft = (provider === EmailProvider.MICROSOFT
+		? { refreshAccessToken: refreshCalls }
+		: {}) as unknown as MicrosoftOAuthService;
 
 	// LogService captures `logAction` calls so tests can assert on the self-heal action log.
 	const logActionCalls = jest.fn();

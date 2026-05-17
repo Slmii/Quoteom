@@ -37,12 +37,10 @@ describe('GmailApiService.listHistoryPage', () => {
 		jest.restoreAllMocks();
 	});
 
-	it('scopes the history walk to INBOX (defense in depth — push delivery is INBOX-only but the walk shouldn\'t pick up Sent/Drafts even on stray pushes)', async () => {
+	it("scopes the history walk to INBOX (defense in depth — push delivery is INBOX-only but the walk shouldn't pick up Sent/Drafts even on stray pushes)", async () => {
 		const fetchSpy = jest
 			.spyOn(global, 'fetch')
-			.mockImplementation(() =>
-				Promise.resolve(makeJsonResponse({ history: [], historyId: '99' }))
-			);
+			.mockImplementation(() => Promise.resolve(makeJsonResponse({ history: [], historyId: '99' })));
 
 		const service = new GmailApiService(logServiceStub);
 		await service.listHistoryPage('TOKEN', { startHistoryId: '42' });

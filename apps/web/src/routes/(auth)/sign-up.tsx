@@ -96,7 +96,11 @@ function SignUpPage() {
 					</Link>
 				</Typography>
 
-				<Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 2, textAlign: 'center' }}>
+				<Typography
+					variant='caption'
+					color='text.secondary'
+					sx={{ display: 'block', mt: 2, textAlign: 'center' }}
+				>
 					Joining a colleague's team? Ask your owner to invite you from the Team page instead.
 				</Typography>
 			</Paper>

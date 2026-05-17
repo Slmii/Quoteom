@@ -37,7 +37,7 @@ import dedent from 'dedent';
  */
 export function buildClassifierPromptNL(input: ClassifierInput): string {
 	const subject = input.subject?.trim() || '(geen onderwerp)';
-	const fromLabel = input.fromName ? `${input.fromName} <${input.fromEmail ?? '?'}>` : input.fromEmail ?? '?';
+	const fromLabel = input.fromName ? `${input.fromName} <${input.fromEmail ?? '?'}>` : (input.fromEmail ?? '?');
 	const body = input.bodyText.trim().slice(0, 4000);
 
 	// JSON-encode every user-supplied value so any quote, newline, or delimiter-like

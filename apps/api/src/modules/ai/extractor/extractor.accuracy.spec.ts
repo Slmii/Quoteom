@@ -167,9 +167,7 @@ describeIfKey('ExtractorService — live OpenAI accuracy', () => {
 				if (field.ok) {
 					console.log(`     ${fieldMark} ${field.name.padEnd(20)} ${actualStr}`);
 				} else {
-					console.log(
-						`     ${fieldMark} ${field.name.padEnd(20)} expected=${expectedStr}  got=${actualStr}`
-					);
+					console.log(`     ${fieldMark} ${field.name.padEnd(20)} expected=${expectedStr}  got=${actualStr}`);
 				}
 			}
 			fixturePayloads.push({

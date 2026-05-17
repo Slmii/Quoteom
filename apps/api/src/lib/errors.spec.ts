@@ -1,7 +1,4 @@
-import {
-	buildMicrosoftAdminConsentUrl,
-	MICROSOFT_ADMIN_CONSENT_ERROR_CODE_REGEX
-} from '@/lib/errors';
+import { buildMicrosoftAdminConsentUrl, MICROSOFT_ADMIN_CONSENT_ERROR_CODE_REGEX } from '@/lib/errors';
 import { describe, expect, it } from '@jest/globals';
 
 describe('MICROSOFT_ADMIN_CONSENT_ERROR_CODE_REGEX', () => {

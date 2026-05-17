@@ -42,19 +42,19 @@ function makeResponseSpy(): ResponseSpy {
 		})
 	} as unknown as Response;
 	spy.res = res;
-	return { ...spy, get body() {
-		return body;
-	} };
+	return {
+		...spy,
+		get body() {
+			return body;
+		}
+	};
 }
 
-function makePrisma(
-	rows: ReadonlyArray<{ subscriptionId: string; emailAccountId: string }>
-): PrismaService {
+function makePrisma(rows: ReadonlyArray<{ subscriptionId: string; emailAccountId: string }>): PrismaService {
 	return {
 		emailAccount: {
 			findFirst: jest.fn().mockImplementation((args: unknown) => {
-				const subscriptionId = (args as { where: { subscriptionId: string } }).where
-					.subscriptionId;
+				const subscriptionId = (args as { where: { subscriptionId: string } }).where.subscriptionId;
 				const row = rows.find(r => r.subscriptionId === subscriptionId);
 				if (!row) {
 					return Promise.resolve(null);
@@ -102,11 +102,7 @@ describe('MicrosoftWebhookController.receive', () => {
 	});
 
 	it('rejects requests without a `value` array', async () => {
-		const controller = new MicrosoftWebhookController(
-			makePrisma([]),
-			makeSubscriptions({}),
-			logServiceStub
-		);
+		const controller = new MicrosoftWebhookController(makePrisma([]), makeSubscriptions({}), logServiceStub);
 		await expect(controller.receive(makeRequest({}), makeResponseSpy().res, undefined)).rejects.toBeInstanceOf(
 			BadRequestException
 		);
@@ -145,9 +141,7 @@ describe('MicrosoftWebhookController.receive', () => {
 
 		await controller.receive(
 			makeRequest({
-				value: [
-					{ subscriptionId: 'sub-1', clientState: 'forged-secret', changeType: 'created' }
-				]
+				value: [{ subscriptionId: 'sub-1', clientState: 'forged-secret', changeType: 'created' }]
 			}),
 			makeResponseSpy().res,
 			undefined
@@ -193,10 +187,11 @@ describe('MicrosoftWebhookController.receive', () => {
 		expect(inngest.send).toHaveBeenCalledTimes(1);
 		const sendArg = (inngest.send as jest.Mock).mock.calls[0]?.[0] as {
 			name: string;
-			data: { emailAccountId: string };
+			data: { emailAccountId: string; organizationId: string };
 		};
 		expect(sendArg.name).toBe('microsoft/delta.changed');
 		expect(sendArg.data.emailAccountId).toBe('ea-1');
+		expect(sendArg.data.organizationId).toBe('org-1');
 	});
 
 	it('drops the whole batch when ANY notification fails clientState verification (mixed batch defense)', async () => {

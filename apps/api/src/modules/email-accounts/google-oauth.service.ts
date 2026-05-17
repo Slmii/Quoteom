@@ -1,5 +1,5 @@
 import type { EnvSchema } from '@/config/env.schema';
-import { GOOGLE_OAUTH_NOT_CONFIGURED, OAUTH_TOKEN_EXCHANGE_FAILED, OAUTH_USERINFO_FAILED } from '@/lib/errors';
+import { EmailConnectErrorCode, GOOGLE_OAUTH_NOT_CONFIGURED, OAUTH_TOKEN_EXCHANGE_FAILED } from '@/lib/errors';
 import {
 	GMAIL_OAUTH_SCOPES,
 	GOOGLE_OAUTH_AUTHORIZE_URL,
@@ -7,7 +7,7 @@ import {
 	GOOGLE_OAUTH_TOKEN_URL,
 	GOOGLE_OAUTH_USERINFO_URL
 } from '@/modules/gmail/gmail.constants';
-import { OAuthRefreshTokenInvalidException } from '@/lib/oauth/oauth-errors';
+import { EmailConnectError, OAuthRefreshTokenInvalidException } from '@/lib/oauth/oauth-errors';
 import { LogService } from '@/modules/logger/log.service';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -98,14 +98,18 @@ export class GoogleOAuthService {
 
 		if (!response.ok) {
 			const text = await response.text();
+			// Google's `invalid_grant` on a code exchange = code already used / expired /
+			// wrong client. Same recovery as Microsoft's AADSTS70000: restart the flow.
+			const isCodeInvalid = /\binvalid_grant\b/.test(text);
+			const code = isCodeInvalid ? EmailConnectErrorCode.CodeReused : EmailConnectErrorCode.TokenExchangeFailed;
 			this.logService.logAction({
 				action: 'oauth.google.token_exchange_failed',
 				message: `Google token exchange failed: HTTP ${response.status}`,
-				metadata: { status: response.status, body: text.slice(0, 500) },
+				metadata: { status: response.status, body: text.slice(0, 500), code },
 				level: 'error',
 				context: 'GoogleOAuthService'
 			});
-			throw new InternalServerErrorException(OAUTH_TOKEN_EXCHANGE_FAILED);
+			throw new EmailConnectError(code, `Google token exchange failed (HTTP ${response.status})`);
 		}
 
 		const data = (await response.json()) as {
@@ -199,7 +203,15 @@ export class GoogleOAuthService {
 		});
 
 		if (!response.ok) {
-			throw new InternalServerErrorException(OAUTH_USERINFO_FAILED);
+			const text = await response.text().catch(() => '');
+			this.logService.logAction({
+				action: 'oauth.google.userinfo_failed',
+				message: `Google userinfo failed: HTTP ${response.status}`,
+				metadata: { status: response.status, body: text.slice(0, 500) },
+				level: 'error',
+				context: 'GoogleOAuthService'
+			});
+			throw new EmailConnectError(EmailConnectErrorCode.UserInfoFailed);
 		}
 
 		return (await response.json()) as GoogleUserInfo;

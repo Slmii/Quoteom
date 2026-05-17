@@ -133,11 +133,7 @@ export class MicrosoftDeltaSyncService {
 					// Per-page commits: a mid-walk failure (token expired, network error)
 					// leaves earlier pages safely in the DB rather than discarding the
 					// whole batch. Carried over from W3.5 audit fix #1.
-					const inserted = await this.persistBatch(
-						emailAccountId,
-						account.organizationId,
-						page.messages
-					);
+					const inserted = await this.persistBatch(emailAccountId, account.organizationId, page.messages);
 					messagesInserted += inserted;
 					messagesSkipped += page.messages.length - inserted;
 				}

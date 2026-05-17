@@ -1,9 +1,5 @@
 import { MembershipRole } from '@/generated/prisma/client';
-import {
-	CANNOT_REMOVE_OWNER,
-	CANNOT_REMOVE_SELF,
-	MEMBERSHIP_NOT_FOUND
-} from '@/lib/errors';
+import { CANNOT_REMOVE_OWNER, CANNOT_REMOVE_SELF, MEMBERSHIP_NOT_FOUND } from '@/lib/errors';
 import { BillingService } from '@/modules/billing/billing.service';
 import { LogService } from '@/modules/logger/log.service';
 import { MembershipResponseDto } from '@/modules/me/dto/membership.response.dto';

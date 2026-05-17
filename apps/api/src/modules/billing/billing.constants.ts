@@ -80,9 +80,4 @@ export const TRIAL_SEAT_LIMIT_CODE = 'trial_seat_limit';
  * every invitation accept while paused. Skipping cleanly here avoids the noise; the
  * next non-paused state transition (resume → active) will sync seats then.
  */
-export const SEAT_SYNC_STATUSES: ReadonlyArray<string> = [
-	'trialing',
-	'active',
-	'past_due',
-	'incomplete'
-];
+export const SEAT_SYNC_STATUSES: ReadonlyArray<string> = ['trialing', 'active', 'past_due', 'incomplete'];

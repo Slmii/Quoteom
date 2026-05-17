@@ -253,8 +253,7 @@ function extractorResultBlock(e) {
 function fixtureBlock(f) {
 	// Auto-expand if either side failed.
 	const failed =
-		(f.classifier && !f.classifier.correct) ||
-		(f.extractor && (f.extractor.error || !f.extractor.acceptable));
+		(f.classifier && !f.classifier.correct) || (f.extractor && (f.extractor.error || !f.extractor.acceptable));
 	const openAttr = failed ? 'open' : '';
 	const rowClass = failed ? 'fixture row-fail' : 'fixture';
 

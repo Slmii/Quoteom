@@ -1,8 +1,8 @@
 import { EmailProvider } from '@/generated/prisma/enums';
-import { EmailAccountsService } from '@/modules/email-accounts/email-accounts.service';
-import { GmailApiService, GmailHistoryExpiredException } from '@/modules/gmail/gmail-api.service';
+import type { EmailAccountsService } from '@/modules/email-accounts/email-accounts.service';
+import { type GmailApiService, GmailHistoryExpiredException } from '@/modules/gmail/gmail-api.service';
 import { GmailDeltaSyncService } from '@/modules/gmail/gmail-delta-sync.service';
-import { PrismaService } from '@/modules/prisma/prisma.service';
+import type { PrismaService } from '@/modules/prisma/prisma.service';
 import { describe, expect, it, jest } from '@jest/globals';
 import { NotFoundException } from '@nestjs/common';
 

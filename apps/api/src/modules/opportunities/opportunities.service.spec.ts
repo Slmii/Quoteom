@@ -172,14 +172,16 @@ describe('OpportunitiesService.processRawMessagesForAccount', () => {
 				.mockReturnValueOnce(Promise.resolve([]))
 		});
 		const classifier = {
-			classify: jest.fn().mockReturnValue(
-				Promise.resolve(
-					wrapClassifier(
-						{ isQuote: true, confidence: 0.97, reason: 'Offerte' },
-						{ callId: 'classifier-call-abc' }
+			classify: jest
+				.fn()
+				.mockReturnValue(
+					Promise.resolve(
+						wrapClassifier(
+							{ isQuote: true, confidence: 0.97, reason: 'Offerte' },
+							{ callId: 'classifier-call-abc' }
+						)
 					)
 				)
-			)
 		};
 		const extractor = {
 			extract: jest.fn().mockReturnValue(

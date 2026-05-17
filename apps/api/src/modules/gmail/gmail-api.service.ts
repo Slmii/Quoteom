@@ -118,7 +118,6 @@ export class GmailApiService {
 		});
 	}
 
-
 	/**
 	 * List the N most recent INBOX message IDs. Used by the `/settings/email` recent-list
 	 * UI. Scoped to INBOX via `labelIds=INBOX` so Sent / Drafts / Spam never appear in the

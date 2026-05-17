@@ -10,6 +10,7 @@ import {
 } from '@/lib/queries/email.queries';
 import { myMembershipQueryOptions } from '@/lib/queries/team.queries';
 import { EmailSettingsSearchSchema } from '@/lib/schemas/email.schema';
+import { getEmailConnectErrorCopy } from '@/lib/utils/email-connect-error';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -140,12 +141,21 @@ function EmailSettingsPage() {
 				{oauthFeedback.error === 'microsoft_admin_consent_required' && oauthFeedback.adminConsentUrl ? (
 					<AdminConsentAlert adminConsentUrl={oauthFeedback.adminConsentUrl} />
 				) : (
-					oauthFeedback.error && (
-						<Alert severity='error' sx={{ mb: 3 }}>
-							The provider returned an error: <strong>{oauthFeedback.error}</strong>. Try connecting
-							again.
-						</Alert>
-					)
+					(() => {
+						const copy = getEmailConnectErrorCopy(oauthFeedback.error);
+						if (!copy) {
+							return null;
+						}
+
+						return (
+							<Alert severity='error' sx={{ mb: 3 }}>
+								<strong>{copy.title}</strong>
+								<Typography variant='body2' sx={{ mt: 0.5 }}>
+									{copy.description}
+								</Typography>
+							</Alert>
+						);
+					})()
 				)}
 
 				{!billingEntitled && (

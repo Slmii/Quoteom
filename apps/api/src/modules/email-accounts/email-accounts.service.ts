@@ -71,13 +71,17 @@ export class EmailAccountsService {
 	 * Emit the matching `<provider>/account.connected` event. Fire-and-forget — failed
 	 * enqueue is logged but does not fail the connect handshake.
 	 */
-	private async emitConnectedEvent(provider: EmailProvider, emailAccountId: string): Promise<void> {
+	private async emitConnectedEvent(
+		provider: EmailProvider,
+		emailAccountId: string,
+		organizationId: string
+	): Promise<void> {
 		const name =
 			provider === EmailProvider.GMAIL
 				? InngestEvents.GmailAccountConnected
 				: InngestEvents.MicrosoftAccountConnected;
 		try {
-			await inngest.send({ name, data: { emailAccountId } });
+			await inngest.send({ name, data: { emailAccountId, organizationId } });
 		} catch (error) {
 			this.logService.logAction({
 				action: 'inngest.event.enqueue_failed',
@@ -160,7 +164,7 @@ export class EmailAccountsService {
 			context: 'EmailAccountsService'
 		});
 
-		await this.emitConnectedEvent(input.provider, row.id);
+		await this.emitConnectedEvent(input.provider, row.id, input.organizationId);
 
 		return row;
 	}

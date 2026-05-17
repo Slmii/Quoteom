@@ -1,10 +1,11 @@
+import { logContext as requestContext } from '@/modules/logger/log-context';
+import type { LogService } from '@/modules/logger/log.service';
 import type { OpportunitiesService } from '@/modules/opportunities/opportunities.service';
 import {
 	PROCESS_MAX_BATCHES_PER_RUN,
 	type OpportunityProcessingBatchResult,
 	type OpportunityProcessingResult
 } from '@/modules/opportunities/opportunities.types';
-import type { LogService } from '@/modules/logger/log.service';
 
 /**
  * Run the opportunities pipeline for an `EmailAccount` across as many Inngest `step.run`
@@ -27,6 +28,14 @@ export interface ProcessOpportunitiesInBatchesArgs {
 	stepNamePrefix: string;
 	/** Logger context (e.g. `'InngestFn:gmail-backfill'`) used for completion + warn logs. */
 	logContext: string;
+	/**
+	 * ALS correlation pushed inside every `step.run` callback so `AICall` + `Log` rows
+	 * written by the classifier/extractor/repository inherit them. Re-establishing the ALS
+	 * context here (instead of relying on the caller's outer wrap) is load-bearing: Inngest
+	 * schedules step callbacks on a different async chain than the function body, so the
+	 * outer ALS frame doesn't propagate across the `step.run` boundary on its own.
+	 */
+	correlation: { requestId: string; organizationId?: string };
 }
 
 export async function processOpportunitiesInBatches(
@@ -46,7 +55,14 @@ export async function processOpportunitiesInBatches(
 	for (let batchIndex = 0; batchIndex < PROCESS_MAX_BATCHES_PER_RUN; batchIndex++) {
 		const batch: OpportunityProcessingBatchResult = await args.step.run(
 			`${args.stepNamePrefix}-${batchIndex}`,
-			() => args.opportunities.processBatch(args.emailAccountId, [...excluded])
+			() =>
+				requestContext.run(
+					{
+						requestId: args.correlation.requestId,
+						...(args.correlation.organizationId ? { organizationId: args.correlation.organizationId } : {})
+					},
+					() => args.opportunities.processBatch(args.emailAccountId, [...excluded])
+				)
 		);
 
 		aggregate.scanned += batch.result.scanned;

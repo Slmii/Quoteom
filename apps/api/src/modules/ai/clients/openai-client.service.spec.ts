@@ -1,9 +1,5 @@
 import type { EnvSchema } from '@/config/env.schema';
-import {
-	AINotConfiguredError,
-	AIProviderError,
-	AISchemaInvalidError
-} from '@/modules/ai/clients/ai-client.interface';
+import { AINotConfiguredError, AIProviderError, AISchemaInvalidError } from '@/modules/ai/clients/ai-client.interface';
 import { OpenAIClient } from '@/modules/ai/clients/openai-client.service';
 import type { AICallLogger } from '@/modules/ai/logging/ai-call-logger.service';
 import type { LogService } from '@/modules/logger/log.service';
@@ -39,10 +35,7 @@ function makeConfig(values: Partial<EnvSchema>): ConfigService<EnvSchema, true> 
  * the SDK exports many typed surfaces (APIError, etc.) we want the real implementations
  * of in assertions.
  */
-async function withMockedParse(
-	service: OpenAIClient,
-	parseImpl: jest.Mock
-): Promise<{ parse: jest.Mock }> {
+async function withMockedParse(service: OpenAIClient, parseImpl: jest.Mock): Promise<{ parse: jest.Mock }> {
 	type Internal = { resolveClient: () => unknown; client: { responses: { parse: jest.Mock } } | null };
 	const internal = service as unknown as Internal;
 	const client = internal.resolveClient();
@@ -54,7 +47,10 @@ async function withMockedParse(
 }
 
 /** Build a successful Responses-API result with `output_parsed` populated. */
-function successResponse(parsed: unknown, opts: { rawText?: string; inputTokens?: number; outputTokens?: number } = {}) {
+function successResponse(
+	parsed: unknown,
+	opts: { rawText?: string; inputTokens?: number; outputTokens?: number } = {}
+) {
 	const rawText = opts.rawText ?? JSON.stringify(parsed);
 	return {
 		output_parsed: parsed,
@@ -252,16 +248,23 @@ describe('OpenAIClient.generate (Responses API)', () => {
 		const client = new OpenAIClient(makeConfig({ OPENAI_API_KEY: 'sk-test' }), logger, logServiceStub);
 		const parse = jest.fn().mockReturnValue(
 			Promise.resolve(
-				successResponse({ isQuote: true, confidence: 0.95 }, {
-					rawText: '{"isQuote":true,"confidence":0.95}',
-					inputTokens: 42,
-					outputTokens: 7
-				})
+				successResponse(
+					{ isQuote: true, confidence: 0.95 },
+					{
+						rawText: '{"isQuote":true,"confidence":0.95}',
+						inputTokens: 42,
+						outputTokens: 7
+					}
+				)
 			)
 		);
 		await withMockedParse(client, parse);
 
-		await client.generate({ purpose: 'classifier', prompt: 'Is this a quote? Email: hello', schema: classifierSchema });
+		await client.generate({
+			purpose: 'classifier',
+			prompt: 'Is this a quote? Email: hello',
+			schema: classifierSchema
+		});
 
 		const logArg = record.mock.calls[0]?.[0] as {
 			prompt: string;

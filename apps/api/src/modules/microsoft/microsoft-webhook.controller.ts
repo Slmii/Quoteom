@@ -4,14 +4,7 @@ import { InngestEvents } from '@/modules/inngest/inngest.constants';
 import { LogService } from '@/modules/logger/log.service';
 import { MicrosoftSubscriptionService } from '@/modules/microsoft/microsoft-subscription.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
-import {
-	BadRequestException,
-	Controller,
-	Post,
-	Query,
-	Req,
-	Res
-} from '@nestjs/common';
+import { BadRequestException, Controller, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -123,7 +116,7 @@ export class MicrosoftWebhookController {
 
 		// Process subscriptions sequentially. Graph batches are small (typically ≤10) and
 		// parallelizing buys us little while making error reporting harder to read.
-		const enqueuedAccountIds = new Set<string>();
+		const enqueuedAccounts = new Map<string, { organizationId: string }>();
 		for (const [subscriptionId, notes] of bySubscription) {
 			const account = await this.prisma.emailAccount.findFirst({
 				where: { provider: EmailProvider.MICROSOFT, subscriptionId },
@@ -170,7 +163,7 @@ export class MicrosoftWebhookController {
 				continue;
 			}
 
-			enqueuedAccountIds.add(account.id);
+			enqueuedAccounts.set(account.id, { organizationId: account.organizationId });
 
 			this.logService.logAction({
 				action: 'microsoft.webhook.received',
@@ -187,17 +180,17 @@ export class MicrosoftWebhookController {
 
 		// Fire one Inngest event per unique account in the batch — the function's
 		// per-mailbox debounce coalesces if multiple POSTs land in quick succession.
-		for (const emailAccountId of enqueuedAccountIds) {
+		for (const [emailAccountId, { organizationId }] of enqueuedAccounts) {
 			try {
 				await inngest.send({
 					name: InngestEvents.MicrosoftDeltaChanged,
-					data: { emailAccountId }
+					data: { emailAccountId, organizationId }
 				});
 			} catch (error) {
 				this.logService.logAction({
 					action: 'microsoft.webhook.enqueue_failed',
 					message: `Failed to enqueue Microsoft delta sync for ${emailAccountId}: ${error instanceof Error ? error.message : 'unknown'}`,
-					metadata: { emailAccountId },
+					metadata: { emailAccountId, organizationId },
 					level: 'error',
 					stack: error instanceof Error ? error.stack : undefined,
 					context: 'MicrosoftWebhookController'

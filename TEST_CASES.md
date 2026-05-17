@@ -1008,6 +1008,63 @@ Bonus checks (validate self-healing):
 
 ---
 
+## AICall correlation (W4.4 follow-up)
+
+Verifies that AI calls fired from Inngest workers populate `organizationId` + `requestId` on the `AICall` audit row, so per-org cost queries and per-run debug filters work in production. Without the wrap inside `define-mailbox-pipeline-function.ts`, both columns land NULL because the `logContext` `AsyncLocalStorage` is only populated by the HTTP request middleware.
+
+Prereqs: `OPENAI_API_KEY` set in `apps/api/.env`; Inngest dev server (`pnpm inngest`) and API dev (`pnpm dev`) both running; `pnpm db:studio` open.
+
+### AICALL-01: Backfill populates `organizationId` + `requestId` on every AICall row
+
+- [ ] Sign in at http://localhost:3000 and connect a Gmail or Microsoft mailbox containing ≥1 real Dutch quote-request email.
+- [ ] In the Inngest dev UI (http://localhost:8288), find the `gmail-backfill` or `microsoft-backfill` run; copy the run's **event id** (top of the run detail panel).
+- [ ] Wait for `*-process-opportunities-batch-0` to complete.
+- [ ] DB check:
+    ```sql
+    SELECT id, purpose, status, "organizationId", "requestId", "userId", "createdAt"
+    FROM "AICall"
+    WHERE "createdAt" > NOW() - INTERVAL '10 minutes'
+    ORDER BY "createdAt" DESC;
+    ```
+- [ ] **Expect** every fresh row has `organizationId` = the active org's UUID, `requestId` = the Inngest event id you copied, `userId` IS NULL (system-triggered).
+- [ ] **Expect** classifier + extractor rows for the same `RawMessage` share the same `requestId`.
+
+### AICALL-02: Delta-sync wraps the same context
+
+- [ ] Send a new email to the connected mailbox; within ~5 s a `gmail-delta-sync` / `microsoft-delta-sync` run fires. Copy its event id.
+- [ ] **Expect** new `AICall` row(s) with that `requestId` and the same `organizationId` as AICALL-01. Proves the wrap covers delta-sync, not just backfill.
+
+### AICALL-03: `Opportunity` FKs join cleanly back to the AICall rows
+
+- [ ] DB check:
+    ```sql
+    SELECT
+      o.id, o."aiProvider",
+      cls.id AS classifier_call_id, cls.purpose AS cls_purpose, cls."organizationId" AS cls_org,
+      ext.id AS extractor_call_id,  ext.purpose AS ext_purpose, ext."organizationId" AS ext_org
+    FROM "Opportunity" o
+    LEFT JOIN "AICall" cls ON cls.id = o."classifiedAiCallId"
+    LEFT JOIN "AICall" ext ON ext.id = o."extractedAiCallId"
+    WHERE o."createdAt" > NOW() - INTERVAL '10 minutes';
+    ```
+- [ ] **Expect** `cls.purpose = 'classifier'`, `ext.purpose = 'extractor'`.
+- [ ] **Expect** `cls_org = ext_org = o."organizationId"` (full audit chain intact).
+
+### AICALL-04: Orphan / unknown `emailAccountId` fails gracefully
+
+- [ ] In the Inngest dev UI click "New event" and fire:
+    ```json
+    {
+    	"name": "gmail/history.changed",
+    	"data": { "emailAccountId": "00000000-0000-0000-0000-000000000000" }
+    }
+    ```
+- [ ] **Expect** the run logs but does **not** crash.
+- [ ] DB check: `SELECT * FROM "Log" WHERE action = 'inngest.event.unknown_email_account' AND "createdAt" > NOW() - INTERVAL '5 minutes';` returns a `WARN`-level row with `metadata.emailAccountId` set to the fake UUID.
+- [ ] **Expect** no new `AICall` row (the provider sync step fails first; the AI pipeline never runs for this fake account).
+
+---
+
 ## How to maintain this doc
 
 - **Adding a feature** → add a new `## Section` with `### XXX-01:` test cases. Use a short uppercase prefix per area (`AUTH`, `INV`, `TEN`, `LOG`, `MAIL`, `DB`, `WEB`, `BILLING`, then `OPP` for opportunities, `QUO` for quotes, etc.).

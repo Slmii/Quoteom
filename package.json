@@ -32,6 +32,8 @@
 		"typescript-eslint": "^8.18.0"
 	},
 	"pnpm": {
-		"onlyBuiltDependencies": ["inngest-cli"]
+		"onlyBuiltDependencies": [
+			"inngest-cli"
+		]
 	}
 }

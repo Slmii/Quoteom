@@ -3,13 +3,13 @@ import { TenantMemberGuard } from '@/common/guards/tenant-member.guard';
 import type { EnvSchema } from '@/config/env.schema';
 import { EmailProvider } from '@/generated/prisma/enums';
 import {
+	EmailConnectErrorCode,
 	MICROSOFT_ADMIN_CONSENT_ERROR_CODE_REGEX,
 	MICROSOFT_ADMIN_CONSENT_REQUIRED,
-	NOT_AUTHENTICATED,
-	OAUTH_CODE_MISSING,
-	OAUTH_STATE_INVALID
+	NOT_AUTHENTICATED
 } from '@/lib/errors';
 import { isOrganizationEntitled } from '@/lib/billing/entitlement-check';
+import { EmailConnectError } from '@/lib/oauth/oauth-errors';
 import { issueOAuthState, verifyOAuthState } from '@/lib/oauth/signed-state';
 import { EmailAccountsService, type MailboxScope } from '@/modules/email-accounts/email-accounts.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
@@ -25,7 +25,6 @@ import { MicrosoftGraphApiService } from '@/modules/microsoft/microsoft-graph-ap
 import { MicrosoftSubscriptionService } from '@/modules/microsoft/microsoft-subscription.service';
 import { MICROSOFT_STATE_COOKIE } from '@/modules/microsoft/microsoft.constants';
 import {
-	BadRequestException,
 	Controller,
 	Get,
 	HttpCode,
@@ -180,56 +179,73 @@ export class MicrosoftController {
 				level: 'warn',
 				context: 'MicrosoftController'
 			});
-			response.redirect(`${webOrigin}/settings/email?error=${encodeURIComponent(error)}`);
+			response.redirect(`${webOrigin}/settings/email?error=${EmailConnectErrorCode.ProviderRejected}`);
 			return;
 		}
 
-		if (!code || !state) {
-			throw new BadRequestException(OAUTH_CODE_MISSING);
+		try {
+			if (!code || !state) {
+				throw new EmailConnectError(EmailConnectErrorCode.CodeMissing);
+			}
+
+			const cookieState = readCookie(request, MICROSOFT_STATE_COOKIE);
+			if (!cookieState || cookieState !== state) {
+				throw new EmailConnectError(EmailConnectErrorCode.StateMismatch);
+			}
+
+			const secret = this.config.get('AUTH_SECRET', { infer: true });
+			const payload = verifyOAuthState(state, secret);
+			if (!payload) {
+				throw new EmailConnectError(EmailConnectErrorCode.StateMismatch);
+			}
+
+			const { organizationId, userId } = scopeFromRequest(request);
+			if (payload.organizationId !== organizationId || payload.userId !== userId) {
+				throw new EmailConnectError(EmailConnectErrorCode.StateMismatch);
+			}
+
+			// Defense-in-depth: entitlement can lapse between `connect` and `callback` (the user
+			// could cancel their subscription in another tab mid-flow). Stop before we exchange
+			// code → tokens, so we never persist credentials for an unbilled org.
+			if (!(await isOrganizationEntitled(this.prisma, organizationId))) {
+				response.redirect(`${webOrigin}/billing?error=connect_requires_subscription`);
+				return;
+			}
+
+			const tokens = await this.oauth.exchangeCode(code);
+			const profile = await this.oauth.fetchUserInfo(tokens.accessToken);
+
+			// Microsoft profiles don't always have `mail` populated (personal accounts that
+			// haven't set up email forwarding return null). Fall back to `userPrincipalName`,
+			// which is email-shaped for both work and consumer Microsoft accounts.
+			const email = profile.mail ?? profile.userPrincipalName;
+
+			await this.accounts.upsertEmailAccount({
+				provider: EmailProvider.MICROSOFT,
+				organizationId,
+				userId,
+				providerAccountId: profile.id,
+				email,
+				tokens
+			});
+
+			response.redirect(`${webOrigin}/settings/email?connected=1`);
+		} catch (err) {
+			// Anything that surfaces as `EmailConnectError` was already logged at the
+			// throw site with full context. Anything else is unexpected — log it here.
+			const errorCode = err instanceof EmailConnectError ? err.code : EmailConnectErrorCode.Unknown;
+			if (!(err instanceof EmailConnectError)) {
+				this.logService.logAction({
+					action: 'oauth.microsoft.callback_unexpected_error',
+					message: `Microsoft callback failed unexpectedly: ${err instanceof Error ? err.message : 'unknown'}`,
+					metadata: { errorCode },
+					level: 'error',
+					stack: err instanceof Error ? err.stack : undefined,
+					context: 'MicrosoftController'
+				});
+			}
+			response.redirect(`${webOrigin}/settings/email?error=${errorCode}`);
 		}
-
-		const cookieState = readCookie(request, MICROSOFT_STATE_COOKIE);
-		if (!cookieState || cookieState !== state) {
-			throw new BadRequestException(OAUTH_STATE_INVALID);
-		}
-
-		const secret = this.config.get('AUTH_SECRET', { infer: true });
-		const payload = verifyOAuthState(state, secret);
-		if (!payload) {
-			throw new BadRequestException(OAUTH_STATE_INVALID);
-		}
-
-		const { organizationId, userId } = scopeFromRequest(request);
-		if (payload.organizationId !== organizationId || payload.userId !== userId) {
-			throw new BadRequestException(OAUTH_STATE_INVALID);
-		}
-
-		// Defense-in-depth: entitlement can lapse between `connect` and `callback` (the user
-		// could cancel their subscription in another tab mid-flow). Stop before we exchange
-		// code → tokens, so we never persist credentials for an unbilled org.
-		if (!(await isOrganizationEntitled(this.prisma, organizationId))) {
-			response.redirect(`${webOrigin}/billing?error=connect_requires_subscription`);
-			return;
-		}
-
-		const tokens = await this.oauth.exchangeCode(code);
-		const profile = await this.oauth.fetchUserInfo(tokens.accessToken);
-
-		// Microsoft profiles don't always have `mail` populated (personal accounts that
-		// haven't set up email forwarding return null). Fall back to `userPrincipalName`,
-		// which is email-shaped for both work and consumer Microsoft accounts.
-		const email = profile.mail ?? profile.userPrincipalName;
-
-		await this.accounts.upsertEmailAccount({
-			provider: EmailProvider.MICROSOFT,
-			organizationId,
-			userId,
-			providerAccountId: profile.id,
-			email,
-			tokens
-		});
-
-		response.redirect(`${webOrigin}/settings/email?connected=1`);
 	}
 
 	@ApiOperation({ summary: 'Is THIS user’s Microsoft mailbox connected for the active org?' })

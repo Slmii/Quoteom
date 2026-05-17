@@ -1,12 +1,12 @@
 import { EmailProvider } from '@/generated/prisma/enums';
-import { EmailAccountsService } from '@/modules/email-accounts/email-accounts.service';
+import type { EmailAccountsService } from '@/modules/email-accounts/email-accounts.service';
 import { MicrosoftDeltaSyncService } from '@/modules/microsoft/microsoft-delta-sync.service';
 import {
 	MicrosoftDeltaTokenExpiredException,
-	MicrosoftGraphApiService,
-	type MicrosoftDeltaPage
+	type MicrosoftDeltaPage,
+	type MicrosoftGraphApiService
 } from '@/modules/microsoft/microsoft-graph-api.service';
-import { PrismaService } from '@/modules/prisma/prisma.service';
+import type { PrismaService } from '@/modules/prisma/prisma.service';
 import { describe, expect, it, jest } from '@jest/globals';
 import { NotFoundException } from '@nestjs/common';
 
@@ -252,8 +252,7 @@ describe('MicrosoftDeltaSyncService.run', () => {
 		const service = new MicrosoftDeltaSyncService(
 			prisma as unknown as PrismaService,
 			makeAccounts(),
-			makeApi({ pages: [{ messages: [{ id: 'm-1' }] }] }) // no nextLink + no deltaLink → break
-		,
+			makeApi({ pages: [{ messages: [{ id: 'm-1' }] }] }), // no nextLink + no deltaLink → break
 			logServiceStub
 		);
 		const result = await service.run('ea-1');

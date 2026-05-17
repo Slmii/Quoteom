@@ -35,16 +35,12 @@ describe('opportunity-list-cursor', () => {
 		// Decodes to a string with no separator.
 		expect(decodeOpportunityListCursor(Buffer.from('no-pipe-here', 'utf8').toString('base64url'))).toBeNull();
 		// Decodes but the date half is invalid.
-		expect(
-			decodeOpportunityListCursor(Buffer.from('not-a-date|some-id', 'utf8').toString('base64url'))
-		).toBeNull();
+		expect(decodeOpportunityListCursor(Buffer.from('not-a-date|some-id', 'utf8').toString('base64url'))).toBeNull();
 		// Decodes but the id half is empty.
 		expect(
 			decodeOpportunityListCursor(Buffer.from('2026-05-17T10:00:00.000Z|', 'utf8').toString('base64url'))
 		).toBeNull();
 		// Decodes but the date half is empty (separator at index 0).
-		expect(
-			decodeOpportunityListCursor(Buffer.from('|some-id', 'utf8').toString('base64url'))
-		).toBeNull();
+		expect(decodeOpportunityListCursor(Buffer.from('|some-id', 'utf8').toString('base64url'))).toBeNull();
 	});
 });

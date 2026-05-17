@@ -6,7 +6,6 @@ import type { InngestEventName } from '@/modules/inngest/inngest.constants';
 import { logContext as requestContext } from '@/modules/logger/log-context';
 import type { LogService } from '@/modules/logger/log.service';
 import type { OpportunitiesService } from '@/modules/opportunities/opportunities.service';
-import { randomUUID } from 'node:crypto';
 import type { InngestFunction } from 'inngest';
 
 /**
@@ -84,8 +83,8 @@ export function defineMailboxPipelineFunction<TSyncResult>(
 			...(config.concurrency ? { concurrency: config.concurrency } : {}),
 			...(config.debounce ? { debounce: config.debounce } : {})
 		},
-		async ({ event, step }) => {
-			const data = event.data as { emailAccountId?: unknown } | undefined;
+		async ({ event, step, runId }) => {
+			const data = event.data as { emailAccountId?: unknown; organizationId?: unknown } | undefined;
 			const emailAccountId = typeof data?.emailAccountId === 'string' ? data.emailAccountId : null;
 
 			if (!emailAccountId) {
@@ -99,11 +98,13 @@ export function defineMailboxPipelineFunction<TSyncResult>(
 				return { skipped: true };
 			}
 
-			// Resolve `organizationId` so every AICall + Log row written from inside this
-			// worker run carries it. Without this wrap, `logContext.get()` returns undefined
-			// (the ALS is only populated by HTTP request middleware) and rows land with
-			// NULL organizationId — breaking per-org cost queries + debug filters.
-			const organizationId = await config.opportunities.resolveOrganizationIdForEmailAccount(emailAccountId);
+			// Prefer organizationId from the event payload (every emit site now includes
+			// it). Fall back to a DB lookup so legacy events without the field still work,
+			// and so a forgotten emit site is non-fatal — we just lose correlation for it.
+			const payloadOrgId = typeof data?.organizationId === 'string' ? data.organizationId : null;
+			const organizationId =
+				payloadOrgId ?? (await config.opportunities.resolveOrganizationIdForEmailAccount(emailAccountId));
+
 			if (!organizationId) {
 				config.logService.logAction({
 					action: 'inngest.event.unknown_email_account',
@@ -114,25 +115,35 @@ export function defineMailboxPipelineFunction<TSyncResult>(
 				});
 			}
 
-			// Use Inngest's event id as the correlation request id — stable across retries
-			// and visible in the Inngest dev UI, so a `Log` row's requestId pivots back to
-			// the originating run. Fallback to a fresh UUID if a future trigger omits it.
-			const requestId = (event as { id?: string }).id ?? randomUUID();
+			// Correlation that every `step.run` callback re-establishes via `logContext.run`
+			// just-before-actual-work. This is load-bearing: Inngest schedules step callbacks
+			// on a different async chain than the function body, so an outer `logContext.run`
+			// wrapping the whole handler doesn't propagate across the step boundary — we
+			// have to set it INSIDE each callback. `runId` is from Inngest's `BaseContext`
+			// (the dev-UI Run ID); `organizationId` comes from the event payload (preferred)
+			// or a DB lookup fallback.
+			const correlation: { requestId: string; organizationId?: string } = {
+				requestId: runId,
+				...(organizationId ? { organizationId } : {})
+			};
 
-			return requestContext.run({ requestId, ...(organizationId ? { organizationId } : {}) }, async () => {
-				const syncResult = await step.run(config.syncStepName, () => config.runSync(emailAccountId));
+			const syncResult = await step.run(config.syncStepName, () =>
+				requestContext.run(correlation, () => config.runSync(emailAccountId))
+			);
 
-				await processOpportunitiesInBatches({
-					step,
-					opportunities: config.opportunities,
-					logService: config.logService,
-					emailAccountId,
-					stepNamePrefix: config.processOpportunitiesStepPrefix,
-					logContext: config.logContext
-				});
+			await processOpportunitiesInBatches({
+				step,
+				opportunities: config.opportunities,
+				logService: config.logService,
+				emailAccountId,
+				stepNamePrefix: config.processOpportunitiesStepPrefix,
+				logContext: config.logContext,
+				correlation
+			});
 
-				if (config.postSyncStep) {
-					await step.run(config.postSyncStep.stepName, async () => {
+			if (config.postSyncStep) {
+				await step.run(config.postSyncStep.stepName, () =>
+					requestContext.run(correlation, async () => {
 						try {
 							await config.postSyncStep!.run(emailAccountId);
 						} catch (error) {
@@ -147,11 +158,11 @@ export function defineMailboxPipelineFunction<TSyncResult>(
 						}
 
 						return { ok: true };
-					});
-				}
+					})
+				);
+			}
 
-				return syncResult;
-			});
+			return syncResult;
 		}
 	);
 }
