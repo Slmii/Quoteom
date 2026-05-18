@@ -282,7 +282,7 @@ describe('OpportunitiesService.list pagination', () => {
 		});
 		const service = makeService({ repository });
 
-		const list = await service.list('org-1', { cursor: null, limit: 2, status: null, search: null });
+		const list = await service.list('org-1', { cursor: null, limit: 2, status: null, search: null, dismissed: null });
 
 		expect(list.opportunities).toHaveLength(2);
 		expect(list.opportunities[0]?.id).toBe('opp-1');
@@ -303,7 +303,7 @@ describe('OpportunitiesService.list pagination', () => {
 		});
 		const service = makeService({ repository });
 
-		const list = await service.list('org-1', { cursor: null, limit: 25, status: null, search: null });
+		const list = await service.list('org-1', { cursor: null, limit: 25, status: null, search: null, dismissed: null });
 
 		expect(list.opportunities).toHaveLength(1);
 		expect(list.nextCursor).toBeNull();

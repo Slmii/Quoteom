@@ -4,6 +4,14 @@ export type OpportunityStatus = (typeof OPPORTUNITY_STATUSES)[number];
 
 export type OpportunityUrgency = 'emergency' | 'high' | 'normal' | 'low';
 
+/**
+ * W4.6 — Reason an opportunity was dismissed by the owner. Distinct axis from
+ * `OpportunityStatus` per D28 — `lost` means "real quote we didn't win," not
+ * "the classifier was wrong." Surfaced in the dismiss modal + admin precision tile.
+ */
+export const OPPORTUNITY_DISMISS_REASONS = ['not_a_quote', 'duplicate', 'spam', 'other'] as const;
+export type OpportunityDismissReason = (typeof OPPORTUNITY_DISMISS_REASONS)[number];
+
 export interface Opportunity {
 	id: string;
 	organizationId: string;
@@ -28,6 +36,9 @@ export interface Opportunity {
 	address: string | null;
 	customerDeadline: string | null;
 	customerAppointment: string | null;
+	dismissedAt: string | null;
+	dismissReason: OpportunityDismissReason | null;
+	dismissedByUserId: string | null;
 }
 
 /**
@@ -53,17 +64,41 @@ export interface OpportunityList {
 	opportunities: Opportunity[];
 	/** Opaque cursor for the next page. `null` when this is the last page. */
 	nextCursor: string | null;
-	/** Totals across the WHOLE org (not just the filtered/paged subset). */
+	/**
+	 * Totals across the WHOLE org (not just the filtered/paged subset). W4.6 — dismissed
+	 * rows are excluded from every bucket so the tab counts stay honest as a workflow funnel.
+	 */
 	statusCounts: OpportunityStatusCounts;
 }
+
+/**
+ * W4.6 — Server-side filter for whether the list includes dismissed rows.
+ *   - `active` (default): only rows where `dismissedAt IS NULL`.
+ *   - `dismissed`: only rows where `dismissedAt IS NOT NULL`.
+ *   - `all`: no filter on `dismissedAt`.
+ */
+export const OPPORTUNITY_DISMISSED_FILTERS = ['active', 'dismissed', 'all'] as const;
+export type OpportunityDismissedFilter = (typeof OPPORTUNITY_DISMISSED_FILTERS)[number];
 
 export interface ListOpportunitiesQuery {
 	cursor?: string;
 	limit?: number;
 	status?: OpportunityStatus;
 	sort?: OpportunitySort;
+	search?: string;
+	dismissed?: OpportunityDismissedFilter;
 }
 
 export interface UpdateOpportunityStatusInput {
 	status: OpportunityStatus;
+}
+
+/**
+ * W4.6 — Payload for `PATCH /api/opportunities/:id/dismiss`. `notes` is optional
+ * free-text the owner can attach when the reason is `other` (or any reason); stored
+ * only in the audit log (`LogService.logAction` metadata), not on the row itself.
+ */
+export interface DismissOpportunityInput {
+	reason: OpportunityDismissReason;
+	notes?: string;
 }

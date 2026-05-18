@@ -90,6 +90,20 @@ enum Urgency {
     LOW
 }
 
+// W4.6 — Reason an Opportunity was dismissed by the owner. Separate axis from
+// `OpportunityStatus` (per D28) so the workflow funnel (`lost`) and the
+// classifier-feedback axis (`NOT_A_QUOTE`) never conflate.
+//   - NOT_A_QUOTE : the classifier was wrong — this email wasn't a quote request.
+//   - DUPLICATE   : same lead already exists as another Opportunity.
+//   - SPAM        : the bulk-mail pre-filter missed it — promotes to filter fixture.
+//   - OTHER       : free-text reason captured in the audit log.
+enum DismissReason {
+    NOT_A_QUOTE
+    DUPLICATE
+    SPAM
+    OTHER
+}
+
 model User {
     id                    String    @id @default(uuid()) @db.Uuid
     email                 String    @unique
@@ -102,11 +116,12 @@ model User {
     createdAt             DateTime  @default(now())
     updatedAt             DateTime  @updatedAt
 
-    currentOrganization Organization?  @relation("CurrentOrganization", fields: [currentOrganizationId], references: [id], onDelete: SetNull)
-    memberships         Membership[]
-    accounts            Account[]
-    sessions            Session[]
-    emailAccounts       EmailAccount[]
+    currentOrganization    Organization?  @relation("CurrentOrganization", fields: [currentOrganizationId], references: [id], onDelete: SetNull)
+    memberships            Membership[]
+    accounts               Account[]
+    sessions               Session[]
+    emailAccounts          EmailAccount[]
+    dismissedOpportunities Opportunity[]  @relation("OpportunityDismissedBy")
 }
 
 model Organization {
@@ -435,6 +450,14 @@ model Opportunity {
     customerDeadline     DateTime?
     customerAppointment  DateTime?
     deliverableHints     Json
+    // W4.6 — Soft-disable (NOT hard-delete) when the owner marks this opportunity as
+    // not a real lead. Preserving the row keeps `classifiedAiCallId` reachable for the
+    // year-2 self-improvement story (W4.4 audit trail) and lets the admin precision
+    // tile compute `1 − dismissed(NOT_A_QUOTE) / total`.
+    // Invariant enforced in DB via raw SQL CHECK: (dismissedAt IS NULL) = (dismissReason IS NULL).
+    dismissedAt          DateTime?
+    dismissReason        DismissReason?
+    dismissedById        String?           @db.Uuid
     createdAt            DateTime          @default(now())
     updatedAt            DateTime          @updatedAt
 
@@ -443,10 +466,17 @@ model Opportunity {
     rawMessage       RawMessage   @relation(fields: [rawMessageId], references: [id], onDelete: Cascade)
     classifiedAiCall AICall?      @relation("OpportunityClassifiedAICall", fields: [classifiedAiCallId], references: [id], onDelete: SetNull)
     extractedAiCall  AICall?      @relation("OpportunityExtractedAICall", fields: [extractedAiCallId], references: [id], onDelete: SetNull)
+    dismissedBy      User?        @relation("OpportunityDismissedBy", fields: [dismissedById], references: [id], onDelete: SetNull)
 
     @@index([organizationId, status, createdAt(sort: Desc)])
     @@index([organizationId, customerDeadline])
     @@index([emailAccountId])
     @@index([classifiedAiCallId])
     @@index([extractedAiCallId])
+    // Index supporting the dismissedAt filter on list queries. The default list path
+    // benefits from a partial index (WHERE "dismissedAt" IS NULL) which Prisma's schema
+    // language doesn't express — it's appended to the generated migration SQL by hand:
+    //   CREATE INDEX "Opportunity_org_createdAt_active_idx"
+    //     ON "Opportunity" ("organizationId", "createdAt" DESC) WHERE "dismissedAt" IS NULL;
+    @@index([organizationId, dismissedAt])
 }

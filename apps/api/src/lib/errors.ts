@@ -134,6 +134,10 @@ export const NO_REFRESH_TOKEN_AVAILABLE = 'No refresh token in token exchange re
 export const OPPORTUNITY_NOT_FOUND = 'Opportunity not found';
 export const invalidOpportunityStatusTransition = (from: string, to: string) =>
 	`Cannot transition opportunity from ${from} to ${to}.`;
+// User-facing — surfaced when an owner un-dismisses a row that wasn't dismissed in the
+// first place. Returned as 409 so the FE can swallow + refresh state without surfacing
+// a scary error toast for what's effectively a duplicate click.
+export const OPPORTUNITY_NOT_DISMISSED = 'Opportunity is not dismissed.';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Microsoft Entra — admin-consent flow (User-facing — structured error code)

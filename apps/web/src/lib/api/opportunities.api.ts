@@ -1,5 +1,5 @@
 import { serverFetch } from '@/lib/api/server-fetch';
-import type { OpportunityList, OpportunityStatus } from '@quoteom/shared';
+import type { OpportunityDismissedFilter, OpportunityList, OpportunityStatus } from '@quoteom/shared';
 import { createServerFn } from '@tanstack/react-start';
 
 export interface ListOpportunitiesInput {
@@ -7,12 +7,13 @@ export interface ListOpportunitiesInput {
 	limit?: number | null;
 	status?: OpportunityStatus | null;
 	search?: string | null;
+	dismissed?: OpportunityDismissedFilter | null;
 }
 
 /**
  * Isomorphic GET /api/opportunities — same code path SSR + client via `createServerFn`.
- * `cursor` + `status` + `search` are forwarded as query params; the API treats
- * nulls/undefineds as "no filter" so the FE doesn't need to build query strings
+ * `cursor` + `status` + `search` + `dismissed` are forwarded as query params; the API
+ * treats nulls/undefineds as "no filter" so the FE doesn't need to build query strings
  * conditionally itself.
  */
 export const listOpportunitiesServer = createServerFn({ method: 'GET' })
@@ -34,6 +35,11 @@ export const listOpportunitiesServer = createServerFn({ method: 'GET' })
 		const trimmedSearch = data.search?.trim();
 		if (trimmedSearch) {
 			params.set('search', trimmedSearch);
+		}
+
+		// `active` is the server default, no need to spend a query-string slot on it.
+		if (data.dismissed && data.dismissed !== 'active') {
+			params.set('dismissed', data.dismissed);
 		}
 
 		const qs = params.toString();

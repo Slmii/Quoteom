@@ -1,4 +1,11 @@
-import { OPPORTUNITY_STATUSES, OPPORTUNITY_SORTS, type OpportunitySort, type OpportunityStatus } from '@quoteom/shared';
+import {
+	OPPORTUNITY_DISMISSED_FILTERS,
+	OPPORTUNITY_SORTS,
+	OPPORTUNITY_STATUSES,
+	type OpportunityDismissedFilter,
+	type OpportunitySort,
+	type OpportunityStatus
+} from '@quoteom/shared';
 import { Transform, Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
@@ -41,4 +48,13 @@ export class ListOpportunitiesQueryDto {
 	@IsString()
 	@MaxLength(80)
 	search?: string;
+
+	/**
+	 * W4.6 — Whether to include dismissed rows. Default behavior (omitted) is `active`
+	 * (hide dismissed). The web "Toon afgewezen" toggle sends `dismissed`. `all`
+	 * exists mostly for tests + the future admin precision panel.
+	 */
+	@IsOptional()
+	@IsIn(OPPORTUNITY_DISMISSED_FILTERS)
+	dismissed?: OpportunityDismissedFilter;
 }

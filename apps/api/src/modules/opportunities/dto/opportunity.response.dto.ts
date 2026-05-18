@@ -1,4 +1,4 @@
-import type { Opportunity, OpportunityStatus, OpportunityUrgency } from '@quoteom/shared';
+import type { Opportunity, OpportunityDismissReason, OpportunityStatus, OpportunityUrgency } from '@quoteom/shared';
 
 /**
  * Date fields are `Date` on the service side, but this DTO intentionally exposes ISO
@@ -28,4 +28,7 @@ export class OpportunityResponseDto implements Opportunity {
 	address!: string | null;
 	customerDeadline!: string | null;
 	customerAppointment!: string | null;
+	dismissedAt!: string | null;
+	dismissReason!: OpportunityDismissReason | null;
+	dismissedByUserId!: string | null;
 }

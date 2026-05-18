@@ -1,4 +1,4 @@
-import type { Opportunity, OpportunityStatus, OpportunityUrgency } from '@quoteom/shared';
+import type { Opportunity, OpportunityDismissReason, OpportunityStatus, OpportunityUrgency } from '@quoteom/shared';
 
 /**
  * Display constants + small helpers for opportunity rows. Centralized so the upcoming
@@ -87,3 +87,15 @@ export function sortOpportunities(rows: readonly Opportunity[], sort: Opportunit
 export function opportunityCustomerLabel(opportunity: Opportunity): string {
 	return opportunity.customerName ?? opportunity.fromName ?? opportunity.fromEmail ?? 'Onbekend';
 }
+
+/**
+ * W4.6 — Dutch labels for the dismiss reasons surfaced in the kebab modal + the
+ * "Toon afgewezen" badge. Kept Dutch-first per `[[project-launch-scope]]` (D21);
+ * en/de/fr variants will sit alongside once `Organization.locale` lands.
+ */
+export const OPPORTUNITY_DISMISS_REASON_LABELS_NL: Record<OpportunityDismissReason, string> = {
+	not_a_quote: 'Geen offerteaanvraag',
+	duplicate: 'Dubbel',
+	spam: 'Spam',
+	other: 'Anders'
+};

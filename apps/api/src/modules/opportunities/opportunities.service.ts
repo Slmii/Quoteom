@@ -2,7 +2,7 @@ import type { EnvSchema } from '@/config/env.schema';
 import { AINotConfiguredError } from '@/modules/ai/clients/ai-client.interface';
 import { ClassifierService } from '@/modules/ai/classifier/classifier.service';
 import { ExtractorService } from '@/modules/ai/extractor/extractor.service';
-import { OPPORTUNITY_NOT_FOUND, invalidOpportunityStatusTransition } from '@/lib/errors';
+import { OPPORTUNITY_NOT_DISMISSED, OPPORTUNITY_NOT_FOUND, invalidOpportunityStatusTransition } from '@/lib/errors';
 import { LogService } from '@/modules/logger/log.service';
 import { OpportunityListResponseDto } from '@/modules/opportunities/dto/opportunity-list.response.dto';
 import { OpportunityResponseDto } from '@/modules/opportunities/dto/opportunity.response.dto';
@@ -12,6 +12,10 @@ import {
 } from '@/modules/opportunities/opportunity-list-cursor';
 import { OpportunityStatus as PrismaOpportunityStatus } from '@/generated/prisma/enums';
 import {
+	OPPORTUNITY_DISMISS_REASON_FROM_WIRE,
+	OPPORTUNITY_DISMISS_REASON_TO_WIRE
+} from '@/modules/opportunities/opportunity-dismiss-reason.mapper';
+import {
 	OPPORTUNITY_STATUS_FROM_WIRE,
 	OPPORTUNITY_STATUS_TO_WIRE,
 	isOpportunityStatusTransitionAllowed
@@ -19,6 +23,7 @@ import {
 import { OPPORTUNITY_URGENCY_TO_WIRE } from '@/modules/opportunities/opportunity-urgency.mapper';
 import {
 	OpportunitiesRepository,
+	type OpportunityDismissedFilter,
 	type OpportunityRecord,
 	type RawMessageForOpportunityProcessing
 } from '@/modules/opportunities/opportunities.repository';
@@ -28,9 +33,12 @@ import type {
 } from '@/modules/opportunities/opportunities.types';
 import { detectBulkMail } from '@/lib/email/bulk-mail-filter';
 import { buildRawMessageAIInput } from '@/lib/email/raw-message-ai-input';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { OpportunityStatus as WireOpportunityStatus } from '@quoteom/shared';
+import type {
+	OpportunityDismissReason as WireDismissReason,
+	OpportunityStatus as WireOpportunityStatus
+} from '@quoteom/shared';
 
 // Soft cap on rows scanned per Inngest `step.run` invocation. The cap is sized so that
 // even at the upper end of provider latency (≈2 s/classification + ≈3 s/extraction on a
@@ -78,11 +86,13 @@ export class OpportunitiesService {
 			limit: number | null;
 			status: WireOpportunityStatus | null;
 			search: string | null;
-		} = { cursor: null, limit: null, status: null, search: null }
+			dismissed: OpportunityDismissedFilter | null;
+		} = { cursor: null, limit: null, status: null, search: null, dismissed: null }
 	): Promise<OpportunityListResponseDto> {
 		const limit = clampLimit(options.limit);
 		const decodedCursor = decodeOpportunityListCursor(options.cursor);
 		const statusFilter = options.status ? OPPORTUNITY_STATUS_FROM_WIRE[options.status] : null;
+		const dismissedFilter = options.dismissed ?? 'active';
 
 		// Over-fetch by one row to detect a next page without a follow-up count query.
 		// `statusCounts` runs in parallel so the segmented filter tabs render with their
@@ -92,7 +102,8 @@ export class OpportunitiesService {
 				take: limit + 1,
 				cursor: decodedCursor,
 				status: statusFilter,
-				search: options.search
+				search: options.search,
+				dismissed: dismissedFilter
 			}),
 			this.repository.countByStatusForOrganization(organizationId)
 		]);
@@ -142,6 +153,95 @@ export class OpportunitiesService {
 		}
 
 		const updated = await this.repository.updateStatus(opportunity.id, nextStatus);
+		return toOpportunityResponseDto(updated);
+	}
+
+	/**
+	 * W4.6 — Soft-disable an opportunity. Reason becomes a feedback signal for the
+	 * classifier (`NOT_A_QUOTE`) or for the bulk-mail filter (`SPAM`). Audit-log
+	 * breadcrumb records the actor, reason, before/after, and optional free-text
+	 * notes so the row stays auditable even though we don't persist notes on the
+	 * row itself. Owners can dismiss already-WON rows (see W4.6.2 spec — uncommon
+	 * but valid: they realise the original email wasn't really an offerteaanvraag
+	 * after the fact); the breadcrumb flags it so the precision metric can ignore.
+	 */
+	async dismiss(
+		organizationId: string,
+		opportunityId: string,
+		reason: WireDismissReason,
+		actorUserId: string,
+		notes: string | null
+	): Promise<OpportunityResponseDto> {
+		const opportunity = await this.repository.findByIdForOrganization(organizationId, opportunityId);
+		if (!opportunity) {
+			throw new NotFoundException(OPPORTUNITY_NOT_FOUND);
+		}
+
+		const prismaReason = OPPORTUNITY_DISMISS_REASON_FROM_WIRE[reason];
+		const previousReason = opportunity.dismissReason
+			? OPPORTUNITY_DISMISS_REASON_TO_WIRE[opportunity.dismissReason]
+			: null;
+
+		// Idempotency at the wire level: re-dismissing with the same reason still bumps
+		// `dismissedAt` (so the audit timeline reflects the latest decision) but is
+		// otherwise a no-op-equivalent — no error to the caller.
+		const updated = await this.repository.dismiss(opportunity.id, prismaReason, actorUserId);
+
+		this.logService.logAction({
+			action: 'opportunity.dismissed',
+			message: `Opportunity ${opportunity.id} dismissed (${reason}) by user ${actorUserId}`,
+			metadata: {
+				organizationId,
+				opportunityId: opportunity.id,
+				reason,
+				previousReason,
+				previousStatus: OPPORTUNITY_STATUS_TO_WIRE[opportunity.status],
+				notes: notes ?? null,
+				actorUserId,
+				classifiedAiCallId: opportunity.classifiedAiCallId ?? null
+			},
+			context: 'OpportunitiesService'
+		});
+
+		return toOpportunityResponseDto(updated);
+	}
+
+	/**
+	 * W4.6 — Reverse a dismiss. Returns 409 if the row wasn't dismissed in the first
+	 * place so the FE can swallow duplicate clicks without surfacing a 4xx toast.
+	 */
+	async undismiss(
+		organizationId: string,
+		opportunityId: string,
+		actorUserId: string
+	): Promise<OpportunityResponseDto> {
+		const opportunity = await this.repository.findByIdForOrganization(organizationId, opportunityId);
+		if (!opportunity) {
+			throw new NotFoundException(OPPORTUNITY_NOT_FOUND);
+		}
+
+		if (!opportunity.dismissedAt) {
+			throw new ConflictException(OPPORTUNITY_NOT_DISMISSED);
+		}
+
+		const previousReason = opportunity.dismissReason
+			? OPPORTUNITY_DISMISS_REASON_TO_WIRE[opportunity.dismissReason]
+			: null;
+
+		const updated = await this.repository.undismiss(opportunity.id);
+
+		this.logService.logAction({
+			action: 'opportunity.undismissed',
+			message: `Opportunity ${opportunity.id} un-dismissed by user ${actorUserId}`,
+			metadata: {
+				organizationId,
+				opportunityId: opportunity.id,
+				previousReason,
+				actorUserId
+			},
+			context: 'OpportunitiesService'
+		});
+
 		return toOpportunityResponseDto(updated);
 	}
 
@@ -378,7 +478,10 @@ function toOpportunityResponseDto(opportunity: OpportunityRecord): OpportunityRe
 		customerEmail: opportunity.customerEmail,
 		address: opportunity.address,
 		customerDeadline: opportunity.customerDeadline?.toISOString() ?? null,
-		customerAppointment: opportunity.customerAppointment?.toISOString() ?? null
+		customerAppointment: opportunity.customerAppointment?.toISOString() ?? null,
+		dismissedAt: opportunity.dismissedAt?.toISOString() ?? null,
+		dismissReason: opportunity.dismissReason ? OPPORTUNITY_DISMISS_REASON_TO_WIRE[opportunity.dismissReason] : null,
+		dismissedByUserId: opportunity.dismissedById ?? null
 	};
 }
 

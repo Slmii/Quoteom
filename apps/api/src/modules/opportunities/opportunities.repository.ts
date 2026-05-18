@@ -1,5 +1,6 @@
 import { Prisma } from '@/generated/prisma/client';
 import {
+	DismissReason as PrismaDismissReason,
 	EmailProvider,
 	OpportunityStatus as PrismaOpportunityStatus,
 	Urgency as PrismaUrgency
@@ -8,6 +9,14 @@ import type { ClassifierResult } from '@/modules/ai/classifier/classifier.types'
 import type { ExtractorResult, Urgency as ExtractorUrgency } from '@/modules/ai/extractor/extractor.types';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
+
+/**
+ * W4.6 — Server-side filter for whether `listByOrganization` includes dismissed rows.
+ * Default `active` hides them (matches the workflow-funnel mental model). `dismissed`
+ * is for the "Toon afgewezen" toggle on the list page. `all` is mostly for tests +
+ * the future admin precision panel.
+ */
+export type OpportunityDismissedFilter = 'active' | 'dismissed' | 'all';
 
 export interface RawMessageForOpportunityProcessing {
 	id: string;
@@ -159,6 +168,8 @@ export class OpportunitiesRepository {
 			cursor: { createdAt: Date; id: string } | null;
 			status: PrismaOpportunityStatus | null;
 			search: string | null;
+			/** W4.6 — defaults to `active` (hides dismissed) when omitted. */
+			dismissed?: OpportunityDismissedFilter;
 		}
 	): Promise<OpportunityRecord[]> {
 		// Keyset pagination on (createdAt DESC, id DESC) — id breaks createdAt ties so the
@@ -189,10 +200,14 @@ export class OpportunitiesRepository {
 			});
 		}
 
+		const dismissedFilter = options.dismissed ?? 'active';
+
 		return this.prisma.opportunity.findMany({
 			where: {
 				organizationId,
 				...(options.status ? { status: options.status } : {}),
+				...(dismissedFilter === 'active' ? { dismissedAt: null } : {}),
+				...(dismissedFilter === 'dismissed' ? { dismissedAt: { not: null } } : {}),
 				...(conditions.length > 0 ? { AND: conditions } : {})
 			},
 			orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -204,11 +219,15 @@ export class OpportunitiesRepository {
 	/**
 	 * Per-status counts for the org. Drives the segmented filter tabs ("New (12) ·
 	 * Replied (8) · ..."). Single SQL aggregation across all 6 statuses.
+	 *
+	 * W4.6 — dismissed rows are excluded so the tab counts stay honest as a workflow
+	 * funnel. Showing the "Toon afgewezen" view in the UI does not change these
+	 * totals — that view filters the list, not the counts.
 	 */
 	async countByStatusForOrganization(organizationId: string): Promise<Record<PrismaOpportunityStatus, number>> {
 		const rows = await this.prisma.opportunity.groupBy({
 			by: ['status'],
-			where: { organizationId },
+			where: { organizationId, dismissedAt: null },
 			_count: { _all: true }
 		});
 		const result = {
@@ -236,6 +255,39 @@ export class OpportunitiesRepository {
 		return this.prisma.opportunity.update({
 			where: { id },
 			data: { status },
+			include: OPPORTUNITY_INCLUDE
+		});
+	}
+
+	/**
+	 * W4.6 — Soft-disable the opportunity with a reason + actor. Idempotent at the
+	 * write level — re-dismissing with the same reason still bumps `dismissedAt` so
+	 * the audit timeline shows the latest decision, but the row is otherwise unchanged.
+	 */
+	async dismiss(id: string, reason: PrismaDismissReason, actorUserId: string): Promise<OpportunityRecord> {
+		return this.prisma.opportunity.update({
+			where: { id },
+			data: {
+				dismissedAt: new Date(),
+				dismissReason: reason,
+				dismissedById: actorUserId
+			},
+			include: OPPORTUNITY_INCLUDE
+		});
+	}
+
+	/**
+	 * W4.6 — Un-dismiss: clear all three columns atomically. Used when the owner
+	 * regrets a dismiss action.
+	 */
+	async undismiss(id: string): Promise<OpportunityRecord> {
+		return this.prisma.opportunity.update({
+			where: { id },
+			data: {
+				dismissedAt: null,
+				dismissReason: null,
+				dismissedById: null
+			},
 			include: OPPORTUNITY_INCLUDE
 		});
 	}
